@@ -1,0 +1,40 @@
+
+[server]
+addr0                          = 47.116.122.133
+addr1                          = 
+
+
+[device]
+sn                             = 6902200001010700
+key                            = 12348888899
+secret                         = 
+type                           = 
+hv                             = 
+sv                             = 
+link                           = 
+
+
+[4g]
+iccid                          = 89861123242048878069
+
+
+[wifi]
+ssid                           = 
+pw                             = 
+
+
+[ptz]
+h                              = 
+v                              = 
+
+
+[other]
+reset                          = 
+rtmp                           = 1
+mode                           = 0
+qlty                           = 0
+main_url							   = rtmp://iot.daguiot.com:7768/video/sn10/81
+sub_url							   = rtmp://iot.daguiot.com:7768/video/sn10/82
+rec_url							   = rtmp://iot.daguiot.com:7768/video/sn10/83
+
+
