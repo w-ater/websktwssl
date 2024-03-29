@@ -1646,7 +1646,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 			
 		return 0;
 	}else{
-		WS_ERR("qqqFailed to connection");
+		WS_ERR("qqqFailed to connection\n");
 		printf("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
 		return -1;
 	}
@@ -1870,60 +1870,21 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 #endif
             //返回的是http回应信息
             if (strncmp((const char*)retBuff, "HTTP", 4) == 0)
-            {
+            {            	
             	if ((p = strstr((char*)retBuff, "Misdirected")) != NULL)
             	{
             		printf("421 Misdirected Request\n");
 					ws_delayms(10*1000);
 					return -1;
             	}
-                //定位到握手字符串
-                if ((p = strstr((char*)retBuff, "Sec-WebSocket-Accept: ")) != NULL)
-                {
-                    p += strlen("Sec-WebSocket-Accept: ");
-                    sscanf((const char*)p, "%s\r\n", p);
-                    //比对握手信息
-                    if (ws_matchShakeKey(shakeKey, strlen((const char*)shakeKey), p, strlen((const char*)p)) == 0)
-                        return fd;
-                    //握手信号不对, 重发协议包
-                    else
-                        ret = send(fd, httpHead, strlen((const char*)httpHead), MSG_NOSIGNAL);
-                        //ret = wolfSSL_write(myssl, httpHead, strlen((const char*)httpHead));
-					
-                }
-                //重发协议包
-                else
-                    ret = send(fd, httpHead, strlen((const char*)httpHead), MSG_NOSIGNAL);
-                    //ret = wolfSSL_write(myssl, httpHead, strlen((const char*)httpHead));
-				
             }
-			/*else if ((p = strstr((char*)retBuff, "server")) != NULL)
-			{
-				p += 8;
-				sscanf((const char*)p, "%s\r\n", p);
-				WS_ERR(" acceptKey[%s]\r\n", p);
-				
-				char delims[] = ",";
-				char *result = NULL;
-				result = strtok(p, delims);
-				printf( "result is %s\n", result );
-				strcpy(ip, result);
-				printf( "ip is %s\n", ip );
-				port = 7758;
-
-				/*while( result != NULL ) {
-					printf( "result is \"%s\"\n", result );
-					result = strtok( NULL, delims );
-				}*/
-		
-			//}*/
             //显示异常返回数据
             else
             {
-                //#ifdef WS_DEBUG
-                WS_ERR("recv: len %d / unknown context\r\n%s\r\n", ret, retBuff);
-                WS_HEX(stderr, retBuff, ret);
-                //#endif
+#ifdef WS_DEBUG
+				WS_ERR("recv: len %d / unknown context\r\n%s\r\n", ret, retBuff);
+				WS_HEX(stderr, retBuff, ret);
+#endif
             }
 			if ((p = strstr((char*)retBuff, "port")) != NULL)
 			{
@@ -2465,7 +2426,7 @@ int au_server_init(char *get_ip)
 	
     //用本进程pid作为唯一标识
     pid = getpid();
-    printf("client wss://%s:%d%s pid/%d\r\n", ip, port, path, pid);
+    printf("client https://%s:%d%s pid/%d\r\n", ip, port, path, pid);
 
     //3秒超时连接服务器
     //同时大量接入时,服务器不能及时响应,可以加大超时时间
