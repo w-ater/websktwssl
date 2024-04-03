@@ -61,8 +61,13 @@
 //#define SERVER_PATH "wss://192.168.1.102:7758/device?sn=6902200000099994&type=0"
 //#define SERVER_PATH "/device?sn=6902200000099994&type=0"
 
+#ifdef WS_DEBUG
 #define WS_INFO(...) fprintf(stdout, "[WS_INFO] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stdout, __VA_ARGS__)
 #define WS_ERR(...) fprintf(stderr, "[WS_ERR] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stderr, __VA_ARGS__)
+#else
+#define WS_INFO(...)
+#define WS_ERR(...) 
+#endif
 
 SSL *myssl;
 SSL_CTX *ctx;
@@ -161,10 +166,10 @@ static void* ws_getHostThread(void* argv)
     }
 
     addr_list = (struct in_addr **)host->h_addr_list;
-    // printf("ip name: %s\r\nip list: ", host->h_name);
+    // WS_ERR("ip name: %s\r\nip list: ", host->h_name);
     // for(i = 0; addr_list[i] != NULL; i++)
-    //     printf("%s, ", inet_ntoa(*addr_list[i]));
-    // printf("\r\n");
+    //     WS_ERR("%s, ", inet_ntoa(*addr_list[i]));
+    // WS_ERR("\r\n");
 
     //一个域名可用解析出多个ip,这里只用了第一个
     if (addr_list[0] == NULL)
@@ -647,7 +652,7 @@ static void ws_buildCheckToken(char* str, char* package)
 		"\"data\":{\"data\":\"%s\"\r\n}\r\n"
 		"}\r\n";
     sprintf(package, CheckToken, str);
-	printf("package %s",package);
+	WS_ERR("package %s",package);
 }
 
 static void ws_buildCode50(char* package)
@@ -655,7 +660,7 @@ static void ws_buildCode50(char* package)
     const char CheckToken[] = "{\"code\":50,\"message\":\"test\"}";
 
     sprintf(package, CheckToken);
-	printf("package %s\n",package);
+	WS_ERR("package %s\n",package);
 
 }
 
@@ -681,7 +686,7 @@ static void ws_buildHttpHead(char* ip, int32_t port, char* path,char* shakeKey, 
         "Sec-WebSocket-Version: 13\r\n"
         "Upgrade: websocket\r\n\r\n";
     sprintf(package, httpDemo, path, ip, port,shakeKey);
-	printf("package %s",package);
+	WS_ERR("package %s",package);
 }
 /*static void ws_buildHttpHead(char* ip, int32_t port, char* path, char* shakeKey, char* package)
 {
@@ -702,7 +707,7 @@ int WS_GET_SN()
 	FILE *fp = fopen("./config", "r");
 	if(NULL == fp)
 	{
-		printf("failed to open config\n");
+		WS_ERR("failed to open config\n");
 		return -1;
 	}
  
@@ -710,25 +715,25 @@ int WS_GET_SN()
 	{
 		memset(SN, 0, sizeof(SN));
 		fgets(SN, sizeof(SN) - 1, fp); // 包含了换行符
-		printf("%s", SN);
+		WS_ERR("%s", SN);
 		if ((p = strstr((char*)SN, "sn")) != NULL){
 							
 				char delims[] = "=";
 				char *result = NULL;
 				result = strtok(p, delims);
-				printf( "result is %s\n", result );
+				WS_ERR( "result is %s\n", result );
 				//strncpy(ip, result+1,strlen(result));
-				//printf( "ip is %s sizeof ip %d\n", ip,sizeof(ip));
+				//WS_ERR( "ip is %s sizeof ip %d\n", ip,sizeof(ip));
 				result = strtok(NULL, delims);
-				//printf( "result is %s   %ld\n", result,strlen(result));
+				//WS_ERR( "result is %s   %ld\n", result,strlen(result));
 				
 
-			//printf("111%s", result+1);	
-			//printf("111%s", result+1);
+			//WS_ERR("111%s", result+1);	
+			//WS_ERR("111%s", result+1);
 			strcpy(SN,result+1);
-			//printf("222%s", SN);
+			//WS_ERR("222%s", SN);
 			SN[strcspn(SN, "\n")] = 0;
-			//printf("333%s %d %ld\n", SN,strlen(SN),sizeof(SN));
+			//WS_ERR("333%s %d %ld\n", SN,strlen(SN),sizeof(SN));
 			break;
 
 		}
@@ -755,25 +760,25 @@ int WS_GET_SN()
     FILE *fp = fopen("./config", "r");
     if(NULL == fp)
     {
-        printf("failed to open config\n");
+        WS_ERR("failed to open config\n");
         return -1;
     }
  
     while(fgets(SN, sizeof(SN), fp) != NULL)
     {
-        printf("%s", SN);
+        WS_ERR("%s", SN);
         if ((p = strstr(SN, "sn")) != NULL){
             char delims[] = "=";
             char *result = NULL;
             result = strtok(SN, delims);
-            printf("result is %s\n", result);
+            WS_ERR("result is %s\n", result);
 
             result = strtok(NULL, delims);
 
             if (result != NULL) {
                 strncpy(SN, result+1, sizeof(SN)-1);
                 SN[strcspn(SN, "\n")] = 0;
-                printf("SN is %s\n", SN);
+                WS_ERR("SN is %s\n", SN);
             }
             break;
         }
@@ -794,19 +799,19 @@ int WS_GET_SN()
     FILE *fp = fopen("./config", "r");
     if(NULL == fp)
     {
-        printf("failed to open config\n");
+        WS_ERR("failed to open config\n");
         return -1;
     }
 
     while(fgets(SN, sizeof(SN), fp) != NULL)
     {
-        printf("%s", SN);
+        WS_ERR("%s", SN);
         if ((p = strstr(SN, "sn")) != NULL)
         {
             char delims[] = "=";
             char *result = NULL;
             result = strtok(SN, delims);
-            printf("result is %s\n", result);
+            WS_ERR("result is %s\n", result);
 
             result = strtok(NULL, delims);
 
@@ -814,11 +819,11 @@ int WS_GET_SN()
             {
                 strncpy(temp, result+1, sizeof(temp)-1); // 使用临时缓冲区
                 temp[strcspn(temp, "\n")] = 0; // 处理换行符
-                printf("SN00000 is %s\n", temp);
+                WS_ERR("SN00000 is %s\n", temp);
 				memcpy(SN,temp,64);
-				printf("SN111 is %s\n", SN);
+				WS_ERR("SN111 is %s\n", SN);
 				strncpy(SN, temp, 64);
-				printf("SN2222 is %s\n", SN);
+				WS_ERR("SN2222 is %s\n", SN);
             }
             break;
         }
@@ -835,19 +840,19 @@ int WS_GET_SN()
     FILE *fp = fopen("./config", "r");
     if(NULL == fp)
     {
-        printf("failed to open config\n");
+        WS_ERR("failed to open config\n");
         return -1;
     }
 
     while(fgets(SN, sizeof(SN), fp) != NULL)
     {
-        printf("%s", SN);
+        WS_ERR("%s", SN);
         if ((p = strstr(SN, "sn")) != NULL)
         {
             char delims[] = "=";
             char *result = NULL;
             result = strtok(SN, delims);
-            printf("result is %s\n", result);
+            WS_ERR("result is %s\n", result);
 
             result = strtok(NULL, delims);
 
@@ -855,7 +860,7 @@ int WS_GET_SN()
             {
                 strncpy(temp, result+1, sizeof(temp)-1); // 使用临时缓冲区
                 temp[strcspn(temp, "\n")] = 0; // 处理换行符
-                printf("SN is %s\n", temp);
+                WS_ERR("SN is %s\n", temp);
 				memcpy(SN,temp,64);
             }
             break;
@@ -877,19 +882,19 @@ int WS_GET_SN(char *snstr)
     FILE *fp = fopen("./config", "r");
     if(NULL == fp)
     {
-        printf("failed to open config\n");
+        WS_ERR("failed to open config\n");
         return -1;
     }
 
     while(fgets(SN, sizeof(SN), fp) != NULL)
     {
-        printf("%s", SN);
+        WS_ERR("%s", SN);
         if ((p = strstr(SN, "sn")) != NULL)
         {
             char delims[] = "=";
             char *result = NULL;
             result = strtok(SN, delims);
-            printf("result is %s\n", result);
+            WS_ERR("result is %s\n", result);
 
             result = strtok(NULL, delims);
 
@@ -897,7 +902,7 @@ int WS_GET_SN(char *snstr)
             {
                 strncpy(temp, result+1, sizeof(temp)-1); // 使用临时缓冲区
                 temp[strcspn(temp, "\n")] = 0; // 处理换行符
-                printf("SN is %s\n", temp);
+                WS_ERR("SN is %s\n", temp);
 				memcpy(SN,temp,64);
             }
             break;
@@ -905,7 +910,7 @@ int WS_GET_SN(char *snstr)
     }*/
 
 	strcpy(SN, snstr);
-	printf("SN is %s\n", SN);
+	WS_ERR("SN is %s\n", SN);
 
     return 0;
 }
@@ -927,7 +932,7 @@ static void ws_buildHttpHead1(char* ip, int32_t port, char* path, char* package)
 		"Content-Length:0\r\n"
 		"\r\n";
     sprintf(package, httpDemo, path, ip, port, SN);
-	printf("package %s\n",package);
+	WS_ERR("package %s\n",package);
 
 }
 
@@ -1290,7 +1295,7 @@ struct tcp_info info;
 #if 1
 int check_tcp_alive()
 {
-	//printf("check_tcp_alive\n");
+	//WS_ERR("check_tcp_alive\n");
 
    // while (0) {
 
@@ -1310,14 +1315,14 @@ int check_tcp_alive()
 				perror("Error in select");
 				//exit(1);
 			} else if (ret == 0) {
-				printf("Timeout occurred\n");
+				WS_ERR("Timeout occurred\n");
 			} else {
-				printf("Socket is ok\n");
+				WS_ERR("WebSocket is ok\n");
 				/*if (FD_ISSET(fd, &readfds)) {
-					printf("Socket is readable\n");
+					WS_ERR("Socket is readable\n");
 				}
 				if (FD_ISSET(fd, &writefds)) {
-					printf("Socket is writable\n");
+					WS_ERR("Socket is writable\n");
 				}*/
 			}
 		//usleep(10000);
@@ -1350,14 +1355,14 @@ int check_tcp_alive()
         perror("Error in select");
         // exit(1); // 可以根据需要选择是否退出程序
     } else if (ret == 0) {
-        printf("Timeout occurred\n");
+        WS_ERR("Timeout occurred\n");
     } else {
-        printf("Socket is ok\n");
+        WS_ERR("Socket is ok\n");
         /*if (FD_ISSET(fd, &readfds)) {
-            printf("Socket is readable\n");
+            WS_ERR("Socket is readable\n");
         }
         if (FD_ISSET(fd, &writefds)) {
-            printf("Socket is writable\n");
+            WS_ERR("Socket is writable\n");
         }*/
     }
     // usleep(10000);
@@ -1370,17 +1375,17 @@ int check_tcp_alive()
 int closewsl()
 {
     if (myssl != NULL) {
-        printf("Fun:%s Close SSL\n", __FUNCTION__);
+        WS_ERR("Fun:%s Close SSL\n", __FUNCTION__);
 		ret = wolfSSL_shutdown(myssl);
         if (ret == WOLFSSL_SHUTDOWN_NOT_DONE)
 		{
-			printf("wolfSSL_shutdown again!!\r\n");
+			WS_ERR("wolfSSL_shutdown again!!\r\n");
             wolfSSL_shutdown(myssl);    /* bidirectional shutdown */
 		}
 		wolfSSL_free(myssl); myssl = NULL;
     }
     if (ctx != NULL) {
-        printf("Fun:%s Close CTX\n", __FUNCTION__);
+        WS_ERR("Fun:%s Close CTX\n", __FUNCTION__);
         wolfSSL_CTX_free(ctx); ctx = NULL;
 		wolfSSL_Cleanup();
     }
@@ -1456,23 +1461,23 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 	timeout.tv_usec = 0;
 
 	if (setsockopt(myfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-		printf("occurred\n");
+		WS_ERR("occurred\n");
 	}
 	
 	/*int iOptVal = 0;
 	int iOptLen = sizeof(int);
 	int iResult = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&iOptVal, &iOptLen);
 	if (iResult < 0) {
-		printf("getsockopt for SO_KEEPALIVE failed with error:\n");
+		WS_ERR("getsockopt for SO_KEEPALIVE failed with error:\n");
 	}
 	else
-		printf("SO_RCVBUF Value: %ld\n", iOptVal);*/
+		WS_ERR("SO_RCVBUF Value: %ld\n", iOptVal);*/
 	
     //connect
     timeoutCount = 0;
 	while (connect(myfd, (struct sockaddr *)&report_addr, sizeof(struct sockaddr)) != 0)
     {
-    	printf("connecting\n");
+    	WS_ERR("connecting\n");
         //if (connect(fd, (struct sockaddr *)&report_addr, sizeof(struct sockaddr)) != 0)
 		if (++timeoutCount > 10)
         {
@@ -1490,10 +1495,10 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
     ctx = SSL_CTX_new (SSLv23_client_method());
     if((ctx) == NULL)
     {
-        printf("Fun:%s\tSSL_CTX ERROR\n", __FUNCTION__);
+        WS_ERR("Fun:%s\tSSL_CTX ERROR\n", __FUNCTION__);
         return -1;
     }
-    printf("tim add SSL_CTX_set_verify test############\n");
+    WS_ERR("tim add SSL_CTX_set_verify test############\n");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);//fix SSL_connect fail
 
     if( (myssl = SSL_new(ctx)) == NULL) {
@@ -1511,20 +1516,20 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
         switch(SSL_get_error(myssl, ssl_ret))//这里出错
         {
             case SSL_ERROR_NONE:
-                printf("Fun:%s\tSSL_ERROR_NONE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
+                WS_ERR("Fun:%s\tSSL_ERROR_NONE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 fgCycleFlag = 0;
                 usleep(100000);
                 break;
             case SSL_ERROR_WANT_WRITE:
-                printf("Fun:%s\tSSL_ERROR_WANT_WRITE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
+                WS_ERR("Fun:%s\tSSL_ERROR_WANT_WRITE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 usleep(100000);
                 break;
             case SSL_ERROR_WANT_READ:
-                printf("Fun:%s\tSSL_ERROR_WANT_READ,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
+                WS_ERR("Fun:%s\tSSL_ERROR_WANT_READ,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 usleep(100000);
                 break;
             default:    
-                printf("SSL_connect:%s\n", __FUNCTION__);
+                WS_ERR("SSL_connect:%s\n", __FUNCTION__);
                 return -1;
         }   
     }
@@ -1548,10 +1553,10 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 	int result = wolfSSL_write(myssl, httpHead, strlen((const char*)httpHead));
 	if (result > 0) {
     // 数据成功写入
-	printf("数据成功写入%d\n",result);
+	WS_ERR("数据成功写入%d\n",result);
 } else {
     // 发生错误
-		printf("发生错误%d\n",result);
+		WS_ERR("发生错误%d\n",result);
 }
     //send(fd, httpHead, strlen((const char*)httpHead), MSG_NOSIGNAL);
 
@@ -1573,7 +1578,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 #endif
 #if 0
 			if ((p = strstr((char*)retBuff, "token")) != NULL)
-			printf("token%s\r\n",p+7);
+			WS_ERR("token%s\r\n",p+7);
 			
 			memset(token_checksume1, 0, sizeof(token_checksume1));
 			//memcpy(token_checksume1, result+1, strlen(send_buff));
@@ -1590,7 +1595,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 #endif
 
 			if ((p = strstr((char*)retBuff, "token")) != NULL) {
-			    printf("token%s\r\n", p + 7);
+			    WS_ERR("token%s\r\n", p + 7);
     
 			    memset(token_checksume1, 0, sizeof(token_checksume1));
     
@@ -1640,14 +1645,14 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
                 //#endif
             }
         }else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR)){
-		//printf("No receive data   !!\r\n");
+		//WS_ERR("No receive data   !!\r\n");
 		
-		printf("%s%d\n", strerror(errno),errno); 
+		WS_ERR("%s%d\n", strerror(errno),errno); 
 			
 		return 0;
 	}else{
 		WS_ERR("qqqFailed to connection\n");
-		printf("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
+		WS_ERR("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
 		return -1;
 	}
         ws_delayms(1);
@@ -1658,7 +1663,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 #endif
 
     //连接失败,返回耗时(负值)
-	printf("xxxxx\n");
+	WS_ERR("xxxxx\n");
     close(myfd);
     return -timeoutCount;
 }
@@ -1723,14 +1728,14 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 	timeout.tv_usec = 0;
 
 	if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-		printf("occurred\n");
+		WS_ERR("occurred\n");
 	}*/
 	
     //connect
     timeoutCount = 0;
 	while (connect(fd, (struct sockaddr *)&report_addr, sizeof(struct sockaddr)) != 0)
     {
-    	printf("connecting\n");
+    	WS_ERR("connecting\n");
         //if (connect(fd, (struct sockaddr *)&report_addr, sizeof(struct sockaddr)) != 0)
 		if (++timeoutCount > 10)
         {
@@ -1748,10 +1753,10 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
     ctx = SSL_CTX_new (SSLv23_client_method());
     if((ctx) == NULL)
     {
-        printf("Fun:%s\tSSL_CTX ERROR\n", __FUNCTION__);
+        WS_ERR("Fun:%s\tSSL_CTX ERROR\n", __FUNCTION__);
         return -1;
     }
-    printf("tim add SSL_CTX_set_verify test############\n");
+    WS_ERR("tim add SSL_CTX_set_verify test############\n");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0);//fix SSL_connect fail
 
     if( (myssl = SSL_new(ctx)) == NULL) {
@@ -1768,20 +1773,20 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
         switch(SSL_get_error(myssl, ssl_ret))//这里出错
         {
             case SSL_ERROR_NONE:
-                printf("Fun:%s\tSSL_ERROR_NONE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
+                WS_ERR("Fun:%s\tSSL_ERROR_NONE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 fgCycleFlag = 0;
                 usleep(100000);
                 break;
             case SSL_ERROR_WANT_WRITE:
-                printf("Fun:%s\tSSL_ERROR_WANT_WRITE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
+                WS_ERR("Fun:%s\tSSL_ERROR_WANT_WRITE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 usleep(100000);
                 break;
             case SSL_ERROR_WANT_READ:
-                printf("Fun:%s\tSSL_ERROR_WANT_READ,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
+                WS_ERR("Fun:%s\tSSL_ERROR_WANT_READ,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 usleep(100000);
                 break;
             default:    
-                printf("SSL_connect:%s\n", __FUNCTION__);
+                WS_ERR("SSL_connect:%s\n", __FUNCTION__);
                 return -1;
         }   
     }
@@ -1789,11 +1794,11 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 	wolfSSL_Init();
 	ctx = SSL_CTX_new(SSLv23_client_method());
 	if (ctx == NULL) {
-	    printf("Fun:%s\tSSL_CTX ERROR\n", __FUNCTION__);
+	    WS_ERR("Fun:%s\tSSL_CTX ERROR\n", __FUNCTION__);
 	    return -1;
 	}
 
-	printf("tim add SSL_CTX_set_verify test############\n");
+	WS_ERR("tim add SSL_CTX_set_verify test############\n");
 	SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, 0); //fix SSL_connect fail
 
 	myssl = SSL_new(ctx);
@@ -1810,22 +1815,22 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 	    ssl_ret = SSL_connect(myssl);
 	    switch (ssl_ret) {
 	        case 1: // SSL连接成功
-	            printf("Fun:%s\tSSL connect successful\n", __FUNCTION__);
+	            WS_ERR("Fun:%s\tSSL connect successful\n", __FUNCTION__);
 	            fgCycleFlag = 0;
 	            usleep(100000);
 	            break;
 	        case 0: // SSL连接失败
 	        case -1: // SSL连接出错
-	            printf("SSL_connect error in %s\n", __FUNCTION__);
+	            WS_ERR("SSL_connect error in %s\n", __FUNCTION__);
 	            SSL_free(myssl); // 释放SSL对象
 	            SSL_CTX_free(ctx); // 释放SSL上下文
 	            return -1;
 	        case -2: // 需要再次调用SSL_connect
-	            printf("Fun:%s\tSSL connect in progress\n", __FUNCTION__);
+	            WS_ERR("Fun:%s\tSSL connect in progress\n", __FUNCTION__);
 	            usleep(100000);
 	            break;
 	        default:
-	            printf("Unknown SSL_connect return value\n");
+	            WS_ERR("Unknown SSL_connect return value\n");
 	            SSL_free(myssl); // 释放SSL对象
 	            SSL_CTX_free(ctx); // 释放SSL上下文
 	            return -1;
@@ -1848,10 +1853,10 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
     	int result = wolfSSL_write(myssl, httpHead, strlen((const char*)httpHead));
 	if (result > 0) {
     // 数据成功写入
-	//printf("数据成功写入%d\n",result);
+	//WS_ERR("数据成功写入%d\n",result);
 } else {
     // 发生错误
-		printf("发生错误%d\n",result);
+		WS_ERR("发生错误%d\n",result);
 }
 
 #ifdef WS_DEBUG
@@ -1873,7 +1878,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
             {            	
             	if ((p = strstr((char*)retBuff, "Misdirected")) != NULL)
             	{
-            		printf("421 Misdirected Request\n");
+            		WS_ERR("421 Misdirected Request\n");
 					ws_delayms(10*1000);
 					return -1;
             	}
@@ -1890,29 +1895,29 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 			{
 				char *pt = p + strlen("port\":");
                 sscanf((const char*)pt, "%s\r\n", pt);
-				//printf( "pppptt is %s %c %c \n", pt,*pt,*(pt+1));
+				//WS_ERR( "pppptt is %s %c %c \n", pt,*pt,*(pt+1));
 				for(int i = 1;i++;i<10){
 					if(*(pt+i)== '\}'){
-						//printf( "11111\n");
+						//WS_ERR( "11111\n");
 						*(pt+i) = '\0';
 						break;
 					}
 					
 				}
-				//printf( "pppptt is %s\n", pt);
+				//WS_ERR( "pppptt is %s\n", pt);
 				char *endptr;
 				long int num;
 
 				num = strtol(pt, &endptr, 10);
 
 				if (*endptr != '\0') {
-					printf("转换失败：输入字符串不是一个有效的整数。\n");
+					WS_ERR("转换失败：输入字符串不是一个有效的整数。\n");
 				} else {
-					printf("转换结果：%ld\n", num);
+					WS_ERR("转换结果：%ld\n", num);
 				}
 				get_port = num;
-				printf("转换结果：%ld %d\n", num,port);
-				printf("get_port%d\n",get_port);
+				WS_ERR("转换结果：%ld %d\n", num,port);
+				WS_ERR("get_port%d\n",get_port);
 		
 			}
 			if ((p = strstr((char*)retBuff, "server")) != NULL)
@@ -1924,16 +1929,16 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 				char delims[] = ",";
 				char *result = NULL;
 				result = strtok(p, delims);
-				//printf( "result is %s\n", result );
+				//WS_ERR( "result is %s\n", result );
 				//strncpy(ip, result+1,strlen(result));
-				//printf( "ip is %s sizeof ip %d\n", ip,sizeof(ip));
+				//WS_ERR( "ip is %s sizeof ip %d\n", ip,sizeof(ip));
 				char delims2[] = "\"";
 				char *result2 = NULL;
 				result2 = strtok(result, delims2);
-				//printf( "result2 is %s\n", result2 );
+				//WS_ERR( "result2 is %s\n", result2 );
 				strcpy(ip, result2);
-				//printf( "ip is %s \n", ip);
-						//printf("%d\r\n",port);
+				//WS_ERR( "ip is %s \n", ip);
+						//WS_ERR("%d\r\n",port);
 
 				return fd;
 		
@@ -1945,7 +1950,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
             break;
     }
     //连接失败,返回耗时(负值)
-	printf("xxxxx\n");
+	WS_ERR("xxxxx\n");
     close(fd);
     return -timeoutCount;
 }
@@ -2048,10 +2053,10 @@ int wssend(char *buf,int len)
 	ret = ws_send(myssl, buf, len, true, WDT_TXTDATA);
 	if (ret > 0) {
 	// 数据成功写入
-			printf("数据成功写入%d\n",ret);
+			WS_ERR("数据成功写入%d\n",ret);
 	} else {
 		// 发生错误
-			printf("发生错误%d\n",ret);
+			WS_ERR("发生错误%d\n",ret);
 	}
 	return ret;
 }
@@ -2307,9 +2312,9 @@ int get_ramdom_num(unsigned char *token_checksume)
     memcpy(token_checksume, checksume, 64);
 	/*for (int i = 0; i < 64; i++)
    {
-	   printf("0x%02x ", token_checksume[i]);
+	   WS_ERR("0x%02x ", token_checksume[i]);
    }
-   printf(" \r\n");*/
+   WS_ERR(" \r\n");*/
 }
 #if 0
 int au_server()
@@ -2318,30 +2323,30 @@ int au_server()
 	memset(token_checksume, 0, sizeof(token_checksume));
 	ws_base64_decode(token_checksume1,token_checksume);
 	WS_ERR("base64_decode token_checksume %s \n", token_checksume);
-	/*printf(" \r\n");
+	/*WS_ERR(" \r\n");
 					for (int i = 0; i < 128; i++)
 	{
-	   printf("0x%02x ", token_checksume[i]);
+	   WS_ERR("0x%02x ", token_checksume[i]);
 	}
-	printf(" \r\n");*/
+	WS_ERR(" \r\n");*/
 
 	get_ramdom_num(token_checksume);
 	//token_checksume[64]='\0';
-	//printf("get_ramdom_num");
-	//printf( "token_checksume is %s\n", token_checksume);
+	//WS_ERR("get_ramdom_num");
+	//WS_ERR( "token_checksume is %s\n", token_checksume);
 
 	for (int i = 0; i < 64; i++)
 	{
-	   printf("0x%02x ", token_checksume[i]);
+	   WS_ERR("0x%02x ", token_checksume[i]);
 	}
-	printf(" \r\n");
+	WS_ERR(" \r\n");
 
 	//base64_encode(token_checksume,strlen(token_checksume),token_checksume1);
-	//printf("base64_encode %s \n", token_checksume1);
+	//WS_ERR("base64_encode %s \n", token_checksume1);
 		memset(token_checksume1, 0, sizeof(token_checksume1));
 
 	ws_base64_encode(token_checksume,token_checksume1,64);
-	printf("ws_base64_encode %s \n", token_checksume1);
+	WS_ERR("ws_base64_encode %s \n", token_checksume1);
 
 	memset(tokenjson, 0, sizeof(tokenjson));                        //创建协议包
 	ws_buildCheckToken(token_checksume1, (char*)tokenjson); //组装http请求头
@@ -2351,17 +2356,17 @@ int au_server()
 	ret = ws_send(myssl, tokenjson, strlen(tokenjson), true, WDT_BINDATA);
 	if (ret <= 0)
 	{
-		printf("client(%d): send failed %d, try again now ...\r\n", pid, ret);
+		WS_ERR("client(%d): send failed %d, try again now ...\r\n", pid, ret);
 		ret = ws_send(myssl, tokenjson, strlen(tokenjson), true, WDT_BINDATA);
 		if (ret <= 0)
 		{
-			printf("client(%d): send failed %d, disconnect now ...\r\n", pid, ret);
+			WS_ERR("client(%d): send failed %d, disconnect now ...\r\n", pid, ret);
 			//break;
 		}
 	}
 	else{
 		//au = 1;
-		printf("ws_send au success\n");
+		WS_ERR("ws_send au success\n");
 		return 0;
 
 	}
@@ -2377,13 +2382,13 @@ int au_server()
 
     for (int i = 0; i < 64; i++)
     {
-        printf("0x%02x ", token_checksume[i]);
+        WS_ERR("0x%02x ", token_checksume[i]);
     }
-    printf(" \r\n");
+    WS_ERR(" \r\n");
 
     memset(token_checksume1, 0, sizeof(token_checksume1));
     ws_base64_encode(token_checksume, token_checksume1, 64);
-    printf("ws_base64_encode %s \n", token_checksume1);
+    WS_ERR("ws_base64_encode %s \n", token_checksume1);
 
     memset(tokenjson, 0, sizeof(tokenjson));
     ws_buildCheckToken(token_checksume1, (char*)tokenjson);
@@ -2395,19 +2400,19 @@ int au_server()
         ret = ws_send(myssl, tokenjson, strlen(tokenjson), true, WDT_BINDATA);
         if (ret <= 0)
         {
-            printf("client(%d): send failed %d, retrying...\r\n", pid, ret);
+            WS_ERR("client(%d): send failed %d, retrying...\r\n", pid, ret);
             retry--;
         }
         else
         {
-            printf("ws_send au success\n");
+            WS_ERR("ws_send au success\n");
             return 0;
         }
     }
 
     if (ret <= 0)
     {
-        printf("client(%d): send failed, disconnecting...\r\n");
+        WS_ERR("client(%d): send failed, disconnecting...\r\n");
         // 可以在发送失败后进行适当的处理，如关闭连接等
     }
 
@@ -2422,22 +2427,22 @@ int au_server_init(char *get_ip)
 	memset(ip, 0, sizeof(ip));
 	//ip = get_ip;
 	strcpy(ip, get_ip);
-	printf("ip %s !!\r\n",ip);
+	WS_ERR("ip %s !!\r\n",ip);
 	
     //用本进程pid作为唯一标识
     pid = getpid();
-    printf("client https://%s:%d%s pid/%d\r\n", ip, port, path, pid);
+    WS_ERR("client https://%s:%d%s pid/%d\r\n", ip, port, path, pid);
 
     //3秒超时连接服务器
     //同时大量接入时,服务器不能及时响应,可以加大超时时间
 	if ((fd = ws_requestQuServer(ip, port, path, 3000)) <= 0)
     {
-        printf("connectQu failed !!\r\n");
+        WS_ERR("connectQu failed !!\r\n");
 		closewsl();
         return -1;
     }else{
 		closewsl();
-		printf("connectQu success !!\r\n");
+		WS_ERR("connectQu success !!\r\n");
 		//port = 7758;
 		memset(path, 0, sizeof(path));
 		char pathDemo[] = "/device?sn=%s&type=0";
@@ -2447,13 +2452,13 @@ int au_server_init(char *get_ip)
 		//get_port = 7758;
 	}
 
-	printf("client wss://%s:%d%s pid/%d\r\n", ip, get_port, path, pid);
+	WS_ERR("client wss://%s:%d%s pid/%d\r\n", ip, get_port, path, pid);
     if ((ret = ws_requestServer(ip, get_port, path, 3000)) <= 0)
     {
-        printf("connect failed !!\r\n");
+        WS_ERR("connect failed !!\r\n");
         return -1;
     }else{
-		printf("connect success !!\r\n");
+		WS_ERR("connect success !!\r\n");
     }
 	au_server();
 	
@@ -2472,53 +2477,53 @@ int au_server_init(char *get_ip)
 
 		//正常包
 		//recv_len = sizeof(recv_buff);
-		//printf(" recv_len%d ret%d\r\n",recv_len,ret);
+		//WS_ERR(" recv_len%d ret%d\r\n",recv_len,ret);
 		
 		if (ret > 0)
 		{
-			printf("111client(%d): recv len/%d %s\r\n", pid, ret, recv_buff);
+			WS_ERR("111client(%d): recv len/%d %s\r\n", pid, ret, recv_buff);
 			
 			if (strstr(recv_buff, "\"code\":200") != NULL)
             {
-				printf("111au success \r\n");
+				WS_ERR("111au success \r\n");
 				return 0;
 
             }else if (strstr(recv_buff, "\"msg\":\"OK\"") != NULL)
             {
-				printf("222au success\r\n");
+				WS_ERR("222au success\r\n");
 				return 0;
 			}else if(strstr(recv_buff, "HTTP/1.1 403 Forbidden") != NULL){
-				printf("au fail \r\n");
+				WS_ERR("au fail \r\n");
 				return -1;
 
 			}
 			//非包数据
 			else if (ret < 0)
-				printf("client(%d): recv len/%d bad pkg %s\r\n", pid, -ret, recv_buff);
+				WS_ERR("client(%d): recv len/%d bad pkg %s\r\n", pid, -ret, recv_buff);
 			//收到特殊包
 			else if (retPkgType == WDT_DISCONN)
 			{
-				printf("client(%d): recv WDT_DISCONN \r\n", pid);
+				WS_ERR("client(%d): recv WDT_DISCONN \r\n", pid);
 				//break;
 			}
 			else if (retPkgType == WDT_PING)
-				printf("client(%d): recv WDT_PING \r\n", pid);
+				WS_ERR("client(%d): recv WDT_PING \r\n", pid);
 			else if (retPkgType == WDT_PONG)
-				printf("client(%d): recv WDT_PONG \r\n", pid);
+				WS_ERR("client(%d): recv WDT_PONG \r\n", pid);
 			/*else{
-				printf("qqqqqqqqqq \r\n");
+				WS_ERR("qqqqqqqqqq \r\n");
 			}*/
 
 
 		}/*else if (ret == 0)
-		printf("recv =0 0  !!\r\n");
+		WS_ERR("recv =0 0  !!\r\n");
 		else if (ret < 0)
-		printf("recv < 0 !!\r\n");*/
+		WS_ERR("recv < 0 !!\r\n");*/
 	
 		ws_delayms(10);
 
 	}
-	printf("connect exit !!\r\n");	
+	WS_ERR("connect exit !!\r\n");	
 
     return 0;
 }
@@ -2529,7 +2534,7 @@ typedef int (*handleData)(char* data, int length);
 	ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);
 	if (ret > 0)
 	{
-		printf("%s\r\n", recv_buff);
+		WS_ERR("%s\r\n", recv_buff);
 	}
 
 	msg = recv_buff;
@@ -2546,27 +2551,27 @@ int netlink_check()
 	if(net_fd<0)
 	{
 	
-		printf("open eth0/operstate err\n");
+		WS_ERR("open eth0/operstate err\n");
 		return 0;
 	}
 	
-	printf("open success\n");
+	WS_ERR("open success\n");
 	memset(statue,0,sizeof(statue));
     int ret=read(net_fd,statue,10);
-    printf("statue is %s",statue);
+    WS_ERR("statue is %s",statue);
 	if(NULL!=strstr(statue,"up"))
 	{
-		printf("on line\n");
+		WS_ERR("on line\n");
 		return 1;
 	}
 	else if(NULL!=strstr(statue,"down"))
 	{
-	   printf("off line\n");
+	   WS_ERR("off line\n");
 	   return -1;
 	}
 	else
 	{
-		printf("unknown err\n");
+		WS_ERR("unknown err\n");
 		return 0;
 	}
 	close(net_fd);
@@ -2581,13 +2586,13 @@ int setrecdataca11(handleData callback)
 	ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);
 	if (ret > 0)
 	{
-		printf("ret %d recv_buff%s\r\n", ret,recv_buff);
+		WS_ERR("ret %d recv_buff%s\r\n", ret,recv_buff);
 		callback(recv_buff,sizeof(recv_buff));
 		return  ret;
 	}else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR)){		//EWOULDBLOCK,EINTR 11 4
-		//printf("No receive data   !!\r\n");
+		//WS_ERR("No receive data   !!\r\n");
 		
-		//printf("%s%d\n", strerror(errno),errno); 
+		//WS_ERR("%s%d\n", strerror(errno),errno); 
 		//if(net_stat++ > 1)
 		if(0)
 		{
@@ -2607,7 +2612,7 @@ int setrecdataca11(handleData callback)
 		return 0;
 	}else{
 		perror("aaaFailed to connection");
-		printf("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
+		WS_ERR("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
 		return -1;
 	}
 
@@ -2619,25 +2624,25 @@ int closewsl2()
     if (myssl != NULL)
     {
         wolfSSL_shutdown(myssl);
-        printf("wolfSSL_shutdown  !!\r\n");
+        WS_ERR("wolfSSL_shutdown  !!\r\n");
         wolfSSL_free(myssl);
-        printf("wolfSSL_free  !!\r\n");
+        WS_ERR("wolfSSL_free  !!\r\n");
         myssl = NULL; // 置空指针
     }
 
     if (ctx != NULL)
     {
         wolfSSL_CTX_free(ctx);
-        printf("wolfSSL_CTX_free  !!\r\n");
+        WS_ERR("wolfSSL_CTX_free  !!\r\n");
         wolfSSL_Cleanup();
-        printf("wolfSSL_Cleanup  !!\r\n");
+        WS_ERR("wolfSSL_Cleanup  !!\r\n");
         ctx = NULL; // 置空指针
     }
 
     if (fd != -1)
     {
         close(fd);
-        printf("close fd  !!\r\n");
+        WS_ERR("close fd  !!\r\n");
         fd = -1; // 将文件描述符置为无效值
     }
 
@@ -2650,27 +2655,27 @@ int closewsl3()
     {
         if (wolfSSL_shutdown(myssl) != SSL_SUCCESS)
         {
-            printf("Error in wolfSSL_shutdown\r\n");
+            WS_ERR("Error in wolfSSL_shutdown\r\n");
             //return -1; // 返回错误
         }
-        printf("wolfSSL_shutdown  !!\r\n");
+        WS_ERR("wolfSSL_shutdown  !!\r\n");
 
 		wolfSSL_free(myssl);
-        printf("wolfSSL_free  !!\r\n");
+        WS_ERR("wolfSSL_free  !!\r\n");
         myssl = NULL; // 置空指针
     }
 
     if (ctx != NULL)
     {
 		wolfSSL_CTX_free(ctx);
-        printf("wolfSSL_CTX_free  !!\r\n");
+        WS_ERR("wolfSSL_CTX_free  !!\r\n");
 
         if (wolfSSL_Cleanup() != SSL_SUCCESS)
         {
-            printf("Error in wolfSSL_Cleanup\r\n");
+            WS_ERR("Error in wolfSSL_Cleanup\r\n");
             //return -1; // 返回错误
         }
-        printf("wolfSSL_Cleanup  !!\r\n");
+        WS_ERR("wolfSSL_Cleanup  !!\r\n");
         ctx = NULL; // 置空指针
     }
 
@@ -2681,7 +2686,7 @@ int closewsl3()
             perror("Error closing file descriptor");
             //return -1; // 返回错误
         }
-        printf("close fd  !!\r\n");
+        WS_ERR("close fd  !!\r\n");
         fd = -1; // 将文件描述符置为无效值
     }
 
