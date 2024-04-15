@@ -1878,6 +1878,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 } else {
     // 发生错误
 		WS_ERR("发生错误%d\n",result);
+		return -1;
 }
 
 #ifdef WS_DEBUG
@@ -1933,6 +1934,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 
 				if (*endptr != '\0') {
 					WS_ERR("转换失败：输入字符串不是一个有效的整数。\n");
+					return -1;
 				} else {
 					WS_INFO("转换结果：%ld\n", num);
 				}
@@ -2072,6 +2074,7 @@ int32_t ws_send(SSL *myssl, void* buff, int32_t buffLen, bool mask, Ws_DataType 
 int wssend(char *buf,int len)
 {
 	ret = ws_send(myssl, buf, len, true, WDT_TXTDATA);
+	//ret = wolfSSL_write(myssl, buf, len);
 	if (ret > 0) {
 	// 数据成功写入
 			WS_INFO("数据成功写入%d\n",ret);
@@ -2610,7 +2613,7 @@ int setrecdataca11(handleData callback)
 		WS_INFO("ret %d recv_buff%s\r\n", ret,recv_buff);
 		callback(recv_buff,sizeof(recv_buff));
 		return  ret;
-	}else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR)){		//EWOULDBLOCK,EINTR 11 4
+	}else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
 		//WS_INFO("No receive data   !!\r\n");
 		
 		//WS_INFO("%s%d\n", strerror(errno),errno); 
@@ -2632,7 +2635,6 @@ int setrecdataca11(handleData callback)
 			
 		return 0;
 	}else{
-		perror("aaaFailed to connection");
 		WS_INFO("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
 		return -1;
 	}
