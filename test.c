@@ -28,14 +28,15 @@ static void sighandler(int sig)
     printf("quit\n");
 }
 
-void ws_buildCode50(char* package)
+void ws_buildCode2001(char* package)
 {
-    const char CheckToken[] = "{\"code\":50,\"message\":\"test\"}";
+    const char CheckToken[] = "{\"code\":2001,\"sn\":\"6902200010110883\",\"message\":\"test\"}";
 
     sprintf(package, CheckToken);
-	printf("package %s",package);
+	printf("package %s\n",package);
 
 }
+
 char buffjson[256] = {0};
 static void ws_buildtest(char* str, char* package)
 {
@@ -110,7 +111,7 @@ int main(int argc,char *argv[])
 		if (ret < 0)
 		{
 			printf("au fail\n");
-			return -1;
+			//return -1;
 		}
 		
 		//ret = IsWsClosed();
@@ -118,7 +119,7 @@ int main(int argc,char *argv[])
 		char httpHead[512] = {0};
 		memset(httpHead, 0, sizeof(httpHead));   
 		//创建协议包
-		ws_buildCode50(httpHead); //组装http请求头
+		ws_buildCode2001(httpHead); //组装http请求头
 
 		wssend(httpHead, strlen((const char*)httpHead));
 		
@@ -132,7 +133,19 @@ int main(int argc,char *argv[])
 				au_server_init();
 				//exit(0);
 			}else{*/
-				check_tcp_alive();
+				//check_tcp_alive();
+				ret = sendHeart(0);
+				if (ret < 0)
+				{
+					printf("******disconnect server******\n");
+					closewsl();
+					//break;
+					ret = au_server_init(ip);
+					if(ret < 0){
+						isConnected=0;
+						continue;
+					}
+				}
 				ret = setrecdataca11(handleData);
 				if (ret > 0)
 				{

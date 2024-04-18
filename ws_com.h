@@ -10,7 +10,7 @@ extern "C"
 #include <stdint.h>  //引入 int8_t uint8_t int32_t uint32_t 等
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-//#define WS_DEBUG //开启debug打印
+#define WS_DEBUG //开启debug打印
 
 // websocket根据data[0]判别数据包类型
 // 比如0x81 = 0x80 | 0x1 为一个txt类型数据包
@@ -21,7 +21,7 @@ typedef enum
     WDT_TXTDATA,  // 0x1：txt类型数据包
     WDT_BINDATA,  // 0x2：bin类型数据包
     WDT_DISCONN,  // 0x8：断开连接类型数据包 收到后需手动 close(fd)
-    WDT_PING,     // 0x8：ping类型数据包 ws_recv 函数内自动回复pong
+    WDT_PING,     // 0x9：ping类型数据包 ws_recv 函数内自动回复pong
     WDT_PONG,     // 0xA：pong类型数据包
 } Ws_DataType;
 

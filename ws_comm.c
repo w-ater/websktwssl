@@ -95,8 +95,8 @@ SSL_CTX *ctx;
 
 int fd=-1,myfd=-1,pid;
 int ret;
-int heart = 0;
 Ws_DataType retPkgType;
+pthread_mutex_t mutex;
 
 char recv_buff[RECV_PKG_MAX];
 char send_buff2[SEND_PKG_MAX];
@@ -1544,11 +1544,11 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
             case SSL_ERROR_WANT_WRITE:
                 WS_ERR("Fun:%s\tSSL_ERROR_WANT_WRITE,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 usleep(100000);
-                break;
+                return -1;
             case SSL_ERROR_WANT_READ:
                 WS_ERR("Fun:%s\tSSL_ERROR_WANT_READ,ssl_ret = %d\n", __FUNCTION__,ssl_ret);
                 usleep(100000);
-                break;
+                return -1;
             default:    
                 WS_ERR("SSL_connect:%s\n", __FUNCTION__);
                 return -1;
@@ -1849,7 +1849,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 	        case -2: // 需要再次调用SSL_connect
 	            WS_ERR("Fun:%s\tSSL connect in progress\n", __FUNCTION__);
 	            usleep(100000);
-	            break;
+	            return -1;
 	        default:
 	            WS_ERR("Unknown SSL_connect return value\n");
 	            SSL_free(myssl); // 释放SSL对象
@@ -2122,15 +2122,25 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
     //先接收数据头部,头部最大2+4+8=14字节
     else
     {
-        if (buffSize < 16)
+        if (buffSize < 16){
             WS_INFO("error, buffSize must be >= 16 \r\n");
-        else
+        	}
+        else{
             //retRecv = recv(fd, buff, 14, MSG_NOSIGNAL);
 			retRecv = wolfSSL_read(myssl, buff, 14);
+			//char recv_buff[128];
+			//memcpy();
+        	}
     }
 
     if (retRecv > 0)
     {
+    	//WS_INFO("retRecv %d buff%s\r\n", retRecv,buff);
+		   /* for (int i = 0; i < retRecv; i++)
+    {
+        printf("0x%02x ", buff[i]);
+    }*/
+    WS_INFO(" \r\n");
         //数据解包
         retDePkg = ws_dePackage((uint8_t*)buff, retRecv, &retDataLen, &retHeadLen, &retPkgType);
         //1. 非标准数据包数据,再接收一次(防止丢数据),之后返回"负len"长度值
@@ -2459,7 +2469,9 @@ int au_server_init(char *get_ip)
 
     //3秒超时连接服务器
     //同时大量接入时,服务器不能及时响应,可以加大超时时间
-	if ((fd = ws_requestQuServer(ip, port, path, 3000)) <= 0)
+    
+	//if ((fd = ws_requestQuServer(ip, port, path, 3000)) <= 0)
+	if (0)
     {
         WS_ERR("connectQu failed !!\r\n");
 		closewsl();
@@ -2472,14 +2484,16 @@ int au_server_init(char *get_ip)
 		char pathDemo[] = "/device?sn=%s&type=0";
 		sprintf(path, pathDemo, SN);
 		//strcpy(path, "/device?sn=6902200000099990&type=0");
-		//strcpy(ip, "183.234.118.166");
-		//get_port = 7758;
+		strcpy(ip, "192.168.100.20");
+		get_port = 7758;
 	}
+
 
 	WS_INFO("client wss://%s:%d%s pid/%d\r\n", ip, get_port, path, pid);
     if ((ret = ws_requestServer(ip, get_port, path, 3000)) <= 0)
     {
         WS_ERR("connect failed !!\r\n");
+		closewsl();
         return -1;
     }else{
 		WS_INFO("connect success !!\r\n");
@@ -2602,6 +2616,53 @@ int netlink_check()
 
 }
 int net_stat;
+static int heart = 0;
+static int nopong_cnt = 0;
+
+int sendHeart(int selInterval)
+{
+	if(nopong_cnt > 5){
+		WS_INFO("client: not recv WDT_PONG %d\r\n",nopong_cnt);
+		return -1;
+	}
+	int interval;
+	if(!selInterval){
+		interval = 48;
+	}else{
+		interval = 5;
+	}
+	//一个合格的客户端,应该定时给服务器发心跳,以检测连接状态
+	heart += 4;
+	if (heart > interval)
+	{
+		heart = 0;
+
+		//发送心跳
+#if 0
+		//用普通数据
+		snprintf(send_buff, sizeof(send_buff), "Heart from client(%d) %s", pid, ws_time());
+		// ret = ws_send(fd, send_buff, sizeof(send_buff), true, WDT_TXTDATA); //大数据量压力测试
+		ret = ws_send(fd, send_buff, strlen(send_buff), true, WDT_TXTDATA);
+#else
+		//用ping包代替心跳
+		//unsigned char ping_frame[] = {0x89, 0x00};	
+		//ret =  ws_send(myssl, ping_frame, sizeof(ping_frame), true, WDT_TXTDATA);		
+		ret =  ws_send(myssl, NULL, 0, true, WDT_PING);
+#endif
+		//send返回异常, 连接已断开
+		if (ret <= 0)
+		{
+			WS_INFO("client(%d): send failed %d, disconnect now ...\r\n", pid, ret);
+			return -1;
+		}else{
+			nopong_cnt++;
+			WS_INFO("client: send WDT_PING %d\r\n",nopong_cnt);
+		}
+	}
+	return 0;
+
+}
+
 int setrecdataca11(handleData callback)
 {
 
@@ -2613,7 +2674,19 @@ int setrecdataca11(handleData callback)
 		WS_INFO("ret %d recv_buff%s\r\n", ret,recv_buff);
 		callback(recv_buff,sizeof(recv_buff));
 		return  ret;
-	}else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
+	}else if (retPkgType == WDT_DISCONN)
+    {
+        WS_INFO("client(%d): recv WDT_DISCONN \r\n", pid);
+		
+		return -1;
+    }
+    else if (retPkgType == WDT_PING){
+        WS_INFO("client(%d): recv WDT_PING \r\n", pid);
+    	}
+    else if (retPkgType == WDT_PONG){
+		nopong_cnt--;
+        WS_INFO("client: recv WDT_PONG %d\r\n", nopong_cnt);
+    }else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
 		//WS_INFO("No receive data   !!\r\n");
 		
 		//WS_INFO("%s%d\n", strerror(errno),errno); 
