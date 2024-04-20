@@ -1264,6 +1264,7 @@ static int32_t ws_dePackage(
     //解包数据使用掩码时, 使用异或解码, maskKey[4]依次和数据异或运算, 逻辑如下
     if (mask)
     {
+    	WS_INFO("has mask\n");
         cIn = dataOffset;
         cOut = 0;
         maskCount = 0;
@@ -1284,6 +1285,8 @@ static int32_t ws_dePackage(
         //这种方法,data指针位置相近时拷贝异常
         // memcpy(data, &data[dataOffset], dataLen);
         //手动拷贝
+        
+		WS_INFO("not mask\n");
         cIn = dataOffset;
         cOut = 0;
         for (; cOut < dataLen; cIn++, cOut++)
@@ -1663,7 +1666,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
                 //#ifdef WS_DEBUG
                 WS_ERR("recv: len %d / unknown context\r\n%s\r\n", ret, retBuff);
                 WS_HEX(stderr, retBuff, ret);
-                //#endif
+				return -1;
             }
         }else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR)){
 		//WS_INFO("No receive data   !!\r\n");
@@ -1898,9 +1901,9 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
             //返回的是http回应信息
             if (strncmp((const char*)retBuff, "HTTP", 4) == 0)
             {            	
-            	if ((p = strstr((char*)retBuff, "Misdirected")) != NULL)
+            	if ((p = strstr((char*)retBuff, "\"code\":204")) != NULL)
             	{
-            		WS_ERR("421 Misdirected Request\n");
+            		WS_ERR("No Content\n");
 					ws_delayms(10*1000);
 					return -1;
             	}
@@ -2135,12 +2138,6 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
 
     if (retRecv > 0)
     {
-    	//WS_INFO("retRecv %d buff%s\r\n", retRecv,buff);
-		   /* for (int i = 0; i < retRecv; i++)
-    {
-        printf("0x%02x ", buff[i]);
-    }*/
-    WS_INFO(" \r\n");
         //数据解包
         retDePkg = ws_dePackage((uint8_t*)buff, retRecv, &retDataLen, &retHeadLen, &retPkgType);
         //1. 非标准数据包数据,再接收一次(防止丢数据),之后返回"负len"长度值
@@ -2238,19 +2235,19 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
                 {
                     //自动 ping-pong
                     //ws_send(fd, NULL, 0, false, WDT_PONG);
-                    // WS_INFO("ws_recv: WDT_PING\r\n");
+                    WS_INFO("ws_recv: WDT_PING\r\n");
                     retFinal = 0;
                 }
                 //收到 PONG 包
                 else if (retPkgType == WDT_PONG)
                 {
-                    // WS_INFO("ws_recv: WDT_PONG\r\n");
+                    WS_INFO("ws_recv: WDT_PONG\r\n");
                     retFinal = 0;
                 }
                 //收到 断连 包
                 else if (retPkgType == WDT_DISCONN)
                 {
-                    // WS_INFO("ws_recv: WDT_DISCONN\r\n");
+                    WS_INFO("ws_recv: WDT_DISCONN\r\n");
                     retFinal = 0;
                 }
                 //其它正常数据包
@@ -2261,7 +2258,11 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
             else
                 retFinal = -retRecv;
         }
-    }
+    }else{
+    	
+		WS_INFO("retRecv %d\r\n",retRecv);
+		return retRecv;
+	}
     //返回包类型
     if (retType)
         *retType = retPkgType;
@@ -2470,8 +2471,8 @@ int au_server_init(char *get_ip)
     //3秒超时连接服务器
     //同时大量接入时,服务器不能及时响应,可以加大超时时间
     
-	//if ((fd = ws_requestQuServer(ip, port, path, 3000)) <= 0)
-	if (0)
+	if ((fd = ws_requestQuServer(ip, port, path, 3000)) <= 0)
+	//if (0)
     {
         WS_ERR("connectQu failed !!\r\n");
 		closewsl();
@@ -2484,8 +2485,8 @@ int au_server_init(char *get_ip)
 		char pathDemo[] = "/device?sn=%s&type=0";
 		sprintf(path, pathDemo, SN);
 		//strcpy(path, "/device?sn=6902200000099990&type=0");
-		strcpy(ip, "192.168.100.20");
-		get_port = 7758;
+		//strcpy(ip, "192.168.100.20");
+		//get_port = 7758;
 	}
 
 
@@ -2621,13 +2622,14 @@ static int nopong_cnt = 0;
 
 int sendHeart(int selInterval)
 {
-	if(nopong_cnt > 5){
+	if(nopong_cnt > 2){
 		WS_INFO("client: not recv WDT_PONG %d\r\n",nopong_cnt);
+		nopong_cnt = 0;
 		return -1;
 	}
 	int interval;
 	if(!selInterval){
-		interval = 48;
+		interval = 96;
 	}else{
 		interval = 5;
 	}
@@ -2667,6 +2669,7 @@ int setrecdataca11(handleData callback)
 {
 
 	memset(recv_buff, 0, sizeof(recv_buff));
+	retPkgType = 0;
 	//ret = wolfSSL_read(myssl, recv_buff, recv_buff);
 	ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);
 	if (ret > 0)
@@ -2682,14 +2685,14 @@ int setrecdataca11(handleData callback)
     }
     else if (retPkgType == WDT_PING){
         WS_INFO("client(%d): recv WDT_PING \r\n", pid);
-    	}
+    }
     else if (retPkgType == WDT_PONG){
 		nopong_cnt--;
         WS_INFO("client: recv WDT_PONG %d\r\n", nopong_cnt);
-    }else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
-		//WS_INFO("No receive data   !!\r\n");
+    }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
+		WS_INFO("No receive data   !!\r\n");
 		
-		//WS_INFO("%s%d\n", strerror(errno),errno); 
+		WS_INFO("ret %d %s%d\n", ret ,strerror(errno),errno); 
 		//if(net_stat++ > 1)
 		if(0)
 		{

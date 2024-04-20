@@ -119,9 +119,9 @@ int main(int argc,char *argv[])
 		char httpHead[512] = {0};
 		memset(httpHead, 0, sizeof(httpHead));   
 		//创建协议包
-		ws_buildCode2001(httpHead); //组装http请求头
+		//ws_buildCode2001(httpHead); //组装http请求头
 
-		wssend(httpHead, strlen((const char*)httpHead));
+		//wssend(httpHead, strlen((const char*)httpHead));
 		
 		//pthread_create(&p_send, 0, sendata, 0);
 		//pthread_join(p_send, NULL);
@@ -134,7 +134,7 @@ int main(int argc,char *argv[])
 				//exit(0);
 			}else{*/
 				//check_tcp_alive();
-				ret = sendHeart(0);
+				ret = sendHeart(1);
 				if (ret < 0)
 				{
 					printf("******disconnect server******\n");
