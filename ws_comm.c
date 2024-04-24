@@ -75,23 +75,22 @@
 #define ERR_LEVEL  2
 
 
-#define LOG_LEVEL 2//打印级别控制的宏定义
+#define LOG_LEVEL 1//打印级别控制的宏定义
 
 #if(LOG_LEVEL == NONE_LEVEL)
 #define WS_INFO(...)
 #define WS_ERR(...) 
 #elif(LOG_LEVEL == INFO_LEVEL)
 #define WS_INFO(...) fprintf(stdout, "[WS_INFO] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stdout, __VA_ARGS__)
-#define WS_ERR(...) 
+#define WS_ERR(...) fprintf(stderr, "[WS_ERR] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stderr, __VA_ARGS__)
 #elif(LOG_LEVEL == ERR_LEVEL)
 #define WS_INFO(...) fprintf(stdout, "[WS_INFO] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stdout, __VA_ARGS__)
-#define WS_ERR(...) fprintf(stderr, "[WS_ERR] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stderr, __VA_ARGS__)
 #endif
 
 
 
-SSL *myssl;
-SSL_CTX *ctx;
+SSL *myssl = NULL;
+SSL_CTX *ctx = NULL;
 
 int fd=-1,myfd=-1,pid;
 int ret;
@@ -1286,7 +1285,7 @@ static int32_t ws_dePackage(
         // memcpy(data, &data[dataOffset], dataLen);
         //手动拷贝
         
-		WS_INFO("not mask\n");
+		//WS_INFO("not mask\n");
         cIn = dataOffset;
         cOut = 0;
         for (; cOut < dataLen; cIn++, cOut++)
@@ -1846,8 +1845,8 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 	        case 0: // SSL连接失败
 	        case -1: // SSL连接出错
 	            WS_ERR("SSL_connect error in %s\n", __FUNCTION__);
-	            SSL_free(myssl); // 释放SSL对象
-	            SSL_CTX_free(ctx); // 释放SSL上下文
+	            //SSL_free(myssl); // 释放SSL对象
+	            //SSL_CTX_free(ctx); // 释放SSL上下文
 	            return -1;
 	        case -2: // 需要再次调用SSL_connect
 	            WS_ERR("Fun:%s\tSSL connect in progress\n", __FUNCTION__);
@@ -1855,8 +1854,8 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 	            return -1;
 	        default:
 	            WS_ERR("Unknown SSL_connect return value\n");
-	            SSL_free(myssl); // 释放SSL对象
-	            SSL_CTX_free(ctx); // 释放SSL上下文
+	            //SSL_free(myssl); // 释放SSL对象
+	            //SSL_CTX_free(ctx); // 释放SSL上下文
 	            return -1;
 	    }
 	}
@@ -2064,7 +2063,7 @@ int32_t ws_send(SSL *myssl, void* buff, int32_t buffLen, bool mask, Ws_DataType 
     }
 #ifdef WS_DEBUG
     //显示数据
-    WS_INFO("ws_send: len/%d %d\r\n", buffLen,retLen);
+    //WS_INFO("ws_send: len/%d %d\r\n", buffLen,retLen);
     //WS_HEX(stdout, wsPkg, retLen);
 #endif
 
@@ -2241,7 +2240,7 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
                 //收到 PONG 包
                 else if (retPkgType == WDT_PONG)
                 {
-                    WS_INFO("ws_recv: WDT_PONG\r\n");
+                    //WS_INFO("ws_recv: WDT_PONG\r\n");
                     retFinal = 0;
                 }
                 //收到 断连 包
@@ -2260,7 +2259,7 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
         }
     }else{
     	
-		WS_INFO("retRecv %d\r\n",retRecv);
+		//WS_INFO("retRecv %d\r\n",retRecv);
 		return retRecv;
 	}
     //返回包类型
@@ -2506,7 +2505,8 @@ int au_server_init(char *get_ip)
 	char delims[] = ":";
 	char *result;
 
-	while(!au)
+	int recvCount = 3; // 设置最大重试次数
+	while(recvCount > 0)
 	{
 		//接收数据
 
@@ -2535,30 +2535,19 @@ int au_server_init(char *get_ip)
 				WS_ERR("au fail \r\n");
 				return -1;
 
-			}
-			//非包数据
-			else if (ret < 0)
-				WS_INFO("client(%d): recv len/%d bad pkg %s\r\n", pid, -ret, recv_buff);
-			//收到特殊包
-			else if (retPkgType == WDT_DISCONN)
-			{
-				WS_INFO("client(%d): recv WDT_DISCONN \r\n", pid);
-				//break;
-			}
-			else if (retPkgType == WDT_PING)
-				WS_INFO("client(%d): recv WDT_PING \r\n", pid);
-			else if (retPkgType == WDT_PONG)
-				WS_INFO("client(%d): recv WDT_PONG \r\n", pid);
-			/*else{
-				WS_INFO("qqqqqqqqqq \r\n");
-			}*/
+			}else if (retPkgType == WDT_DISCONN){
+	            printf("client(%d): recv WDT_DISCONN \r\n", pid);
+	            break;
+	        }
+	        else if (retPkgType == WDT_PING)
+	            printf("client(%d): recv WDT_PING \r\n", pid);
+	        else if (retPkgType == WDT_PONG)
+	            printf("client(%d): recv WDT_PONG \r\n", pid);
 
-
-		}/*else if (ret == 0)
-		WS_INFO("recv =0 0  !!\r\n");
-		else if (ret < 0)
-		WS_INFO("recv < 0 !!\r\n");*/
-	
+		}else if(ret < 0){
+			WS_INFO("recv <= 0 !!\r\n");
+			recvCount--;
+		}
 		ws_delayms(10);
 
 	}
@@ -2567,18 +2556,6 @@ int au_server_init(char *get_ip)
     return 0;
 }
 typedef int (*handleData)(char* data, int length);
-/*int recvstr(char* data, int length)
-{
-	memset(recv_buff, 0, sizeof(recv_buff));
-	ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);
-	if (ret > 0)
-	{
-		WS_INFO("%s\r\n", recv_buff);
-	}
-
-	msg = recv_buff;
-	return  ret;
-}*/
 
 int netlink_check()
 {
@@ -2692,7 +2669,7 @@ int setrecdataca11(handleData callback)
     }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
 		WS_INFO("No receive data   !!\r\n");
 		
-		WS_INFO("ret %d %s%d\n", ret ,strerror(errno),errno); 
+		//WS_INFO("ret %d %s%d\n", ret ,strerror(errno),errno); 
 		//if(net_stat++ > 1)
 		if(0)
 		{
@@ -2718,79 +2695,5 @@ int setrecdataca11(handleData callback)
 	//callback(recv_buff,sizeof(recv_buff));
 	return  ret;
 }
-int closewsl2()
-{
-    if (myssl != NULL)
-    {
-        wolfSSL_shutdown(myssl);
-        WS_INFO("wolfSSL_shutdown  !!\r\n");
-        wolfSSL_free(myssl);
-        WS_INFO("wolfSSL_free  !!\r\n");
-        myssl = NULL; // 置空指针
-    }
-
-    if (ctx != NULL)
-    {
-        wolfSSL_CTX_free(ctx);
-        WS_INFO("wolfSSL_CTX_free  !!\r\n");
-        wolfSSL_Cleanup();
-        WS_INFO("wolfSSL_Cleanup  !!\r\n");
-        ctx = NULL; // 置空指针
-    }
-
-    if (fd != -1)
-    {
-        close(fd);
-        WS_INFO("close fd  !!\r\n");
-        fd = -1; // 将文件描述符置为无效值
-    }
-
-    return 0; // 返回成功
-}
-
-int closewsl3()
-{
-    if (myssl != NULL)
-    {
-        if (wolfSSL_shutdown(myssl) != SSL_SUCCESS)
-        {
-            WS_INFO("Error in wolfSSL_shutdown\r\n");
-            //return -1; // 返回错误
-        }
-        WS_INFO("wolfSSL_shutdown  !!\r\n");
-
-		wolfSSL_free(myssl);
-        WS_INFO("wolfSSL_free  !!\r\n");
-        myssl = NULL; // 置空指针
-    }
-
-    if (ctx != NULL)
-    {
-		wolfSSL_CTX_free(ctx);
-        WS_INFO("wolfSSL_CTX_free  !!\r\n");
-
-        if (wolfSSL_Cleanup() != SSL_SUCCESS)
-        {
-            WS_INFO("Error in wolfSSL_Cleanup\r\n");
-            //return -1; // 返回错误
-        }
-        WS_INFO("wolfSSL_Cleanup  !!\r\n");
-        ctx = NULL; // 置空指针
-    }
-
-    if (fd != -1)
-    {
-        if (close(fd) == -1)
-        {
-            perror("Error closing file descriptor");
-            //return -1; // 返回错误
-        }
-        WS_INFO("close fd  !!\r\n");
-        fd = -1; // 将文件描述符置为无效值
-    }
-
-    return 0; // 返回成功
-}
-
 
 #endif
