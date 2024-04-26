@@ -1311,10 +1311,6 @@ static int32_t ws_dePackage(
  * 返回: >0 返回连接描述符 <= 0 连接失败或超时,所花费的时间ms的负值
  * 说明: 无
  ******************************************************************************/
-
-#include <netinet/ip.h>
-#include <netinet/tcp.h>
-struct tcp_info info; 
 #if 1
 int check_tcp_alive()
 {
@@ -1352,46 +1348,6 @@ int check_tcp_alive()
     	//}
 
 	return 0;
-}
-#endif
-#if 0
-
-int check_tcp_alive()
-{
-    // 设置fd为所需的套接字文件描述符
-    // int fd = ...;
-
-    // while (1) {
-    fd_set readfds, writefds;
-    struct timeval timeout;
-
-    FD_ZERO(&readfds);
-    FD_ZERO(&writefds);
-    FD_SET(fd, &readfds);
-    FD_SET(fd, &writefds);
-
-    timeout.tv_sec = 5;
-    timeout.tv_usec = 0;
-
-    int ret = select(fd + 1, &readfds, &writefds, NULL, &timeout);
-    if (ret == -1) {
-        perror("Error in select");
-        // exit(1); // 可以根据需要选择是否退出程序
-    } else if (ret == 0) {
-        WS_INFO("Timeout occurred\n");
-    } else {
-        WS_INFO("Socket is ok\n");
-        /*if (FD_ISSET(fd, &readfds)) {
-            WS_INFO("Socket is readable\n");
-        }
-        if (FD_ISSET(fd, &writefds)) {
-            WS_INFO("Socket is writable\n");
-        }*/
-    }
-    // usleep(10000);
-    // }
-
-    return 0;
 }
 #endif
 
@@ -1900,7 +1856,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
             //返回的是http回应信息
             if (strncmp((const char*)retBuff, "HTTP", 4) == 0)
             {            	
-            	if ((p = strstr((char*)retBuff, "\"code\":204")) != NULL)
+            	if ((p = strstr((char*)retBuff, "204 No Content")) != NULL)
             	{
             		WS_ERR("No Content\n");
 					ws_delayms(10*1000);
@@ -1911,7 +1867,7 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
             else
             {
 #ifdef WS_DEBUG
-				WS_ERR("recv: len %d / unknown context\r\n%s\r\n", ret, retBuff);
+				WS_ERR("unknown context /recv: len %d\r\n%s\r\n", ret, retBuff);
 				WS_HEX(stderr, retBuff, ret);
 #endif
             }
@@ -2455,9 +2411,17 @@ int au_server()
 
 int au_server_init(char *get_ip)
 {
-	//SSL *myssl;
-	//myssl = *ssl;
-	
+
+#ifdef FIREALARM
+	WS_INFO("FIREALARM version\r\n");
+	memset(path, 0, sizeof(path));
+	char pathDemo[] = "/device?sn=%s&type=0";
+	sprintf(path, pathDemo, SN);
+	strcpy(ip, "iot.daguiot.com");
+	get_port = 7758;
+
+#else
+	WS_INFO("universal version\r\n");
 	memset(ip, 0, sizeof(ip));
 	//ip = get_ip;
 	strcpy(ip, get_ip);
@@ -2469,7 +2433,6 @@ int au_server_init(char *get_ip)
 
     //3秒超时连接服务器
     //同时大量接入时,服务器不能及时响应,可以加大超时时间
-    
 	if ((fd = ws_requestQuServer(ip, port, path, 3000)) <= 0)
 	//if (0)
     {
@@ -2488,6 +2451,7 @@ int au_server_init(char *get_ip)
 		//get_port = 7758;
 	}
 
+#endif
 
 	WS_INFO("client wss://%s:%d%s pid/%d\r\n", ip, get_port, path, pid);
     if ((ret = ws_requestServer(ip, get_port, path, 3000)) <= 0)

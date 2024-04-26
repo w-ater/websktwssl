@@ -104,7 +104,7 @@ int main(int argc,char *argv[])
 		//SSL *ssl = NULL;
 
         printf("静态库测试 : \n");
-		char *snstr = "6902200010111237";//6902200010111237 6902200010110883
+		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
 		WS_GET_SN(snstr);
 		
 		ret = au_server_init(ip);
