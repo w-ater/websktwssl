@@ -2408,6 +2408,394 @@ int au_server()
 
     return -1; // 返回发送失败
 }
+#include <regex.h>
+#include <stdbool.h>
+
+bool hasIP2(const char *strSrc) {
+    regex_t regex;
+    int ret;
+    char pattern[] = "((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)";
+    regmatch_t match[1];
+    
+    if (regcomp(&regex, pattern, REG_EXTENDED) != 0) {
+        return false;
+    }
+
+    ret = regexec(&regex, strSrc, 1, match, 0);
+    regfree(&regex);
+
+    if (ret == 0) {
+        char ip[256];
+        snprintf(ip, sizeof(ip), "%.*s", (int)(match[0].rm_eo - match[0].rm_so), strSrc + match[0].rm_so);
+        printf("find: %s\n", ip);
+        return true;
+    }
+
+    return false;
+}
+
+bool hasIP(const char *strSrc) {
+	
+	 regex_t regex;
+	 int reti;
+	 char ip_pattern[] = "([0-9]{1,3}\\.){3}[0-9]{1,3}";
+	
+	 // 编译正则表达式
+	 reti = regcomp(&regex, ip_pattern, REG_EXTENDED);
+	 if (reti) {
+		 fprintf(stderr, "Could not compile regex\n");
+		 return -1;
+	 }
+	
+		 reti = regexec(&regex, strSrc, 0, NULL, 0);
+		 if (!reti) {
+			 printf("Found IP address: %s", strSrc);
+			 regfree(&regex);
+			 return true;
+		 }
+	
+	 regfree(&regex);
+	
+	 return 0;
+
+}
+
+
+int execute4GCmd2(const char *strCmd, char *buffer) {
+    FILE *fp;
+    char buf[258];
+
+    fp = popen(strCmd, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error opening pipe!\n");
+        return -1;
+    }else{
+			
+		WS_ERR("strCmd%s success\n",strCmd);
+	}
+	usleep(1000 * 1000);
+
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+		
+	WS_ERR("qqqqqqqqq\n");
+        if (strstr(buf, buffer) != NULL) {
+            strcpy(buffer, buf);
+			
+			WS_ERR("strCmd %s buffer is %s\n",strCmd,buffer);
+            pclose(fp);
+            return 0;
+        }else{
+				WS_ERR("not same %s", buf);
+        	}
+    }
+
+    pclose(fp);
+    return -1;
+}
+int getCmdResult(const char *strCmd, char *strResult, size_t resultSize) {
+    FILE *fp;
+    char buffer[1024] = {0};
+    char strRet[1024] = {0};
+
+    // 执行命令并打开管道
+    fp = popen(strCmd, "r");
+    if (fp == NULL) {
+        printf("无法执行命令\n");
+        return 1;
+    }
+	WS_ERR("strCmd %s\n", strCmd);
+    // 逐行读取命令输出并存储
+    while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+		
+	printf("无法执行命令\n");
+        strncat(strRet, buffer, sizeof(strRet) - strlen(strRet) - 1);
+		
+    strRet[resultSize - 1] = '\0'; // 确保以空字符结尾
+		WS_ERR("strRet %s\n", strRet);
+	usleep(100*1000);
+    }
+
+    // 关闭管道
+    pclose(fp);
+
+    // 将结果复制到输出参数中
+    strncpy(strResult, strRet, resultSize - 1);
+    strResult[resultSize - 1] = '\0'; // 确保以空字符结尾
+	WS_ERR(" %s\n", strResult);
+
+    return 0;
+}
+
+int execute4GCmd3(const char *strCmd, char *buffer) {
+	system(strCmd);
+
+    // 执行cat命令并将输出重定向到文件
+    //system("cat /dev/ttyUSB2 > output.txt");
+
+    FILE *fp;
+    char buf[258];
+
+    fp = popen("cat /dev/ttyUSB2 &", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error opening pipe!\n");
+        return -1;
+    }else{
+			
+		WS_ERR("strCmd%s success\n",strCmd);
+	}
+	usleep(1000 * 1000);
+
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+		
+	WS_ERR("qqqqqqqqq%s\n",buf);
+        if (strstr(buf, buffer) != NULL) {
+            strcpy(buffer, buf);
+			
+			WS_ERR("strCmd %s buffer is %s\n",strCmd,buffer);
+            pclose(fp);
+            return 0;
+        }else{
+				WS_ERR("not same %s", buf);
+        	}
+    }
+
+    pclose(fp);
+    return -1;
+
+
+}
+#include <signal.h>
+
+pid_t KillProcessPidbyName2(char *name)
+{
+    FILE *fptr;
+    char buf[1056] = { 0 };
+    char cmd[256] = { 0 };
+    pid_t pid = -1;
+    sprintf(cmd, "pidof %s", name);
+    if ((fptr = popen(cmd, "r")) != NULL) {
+        if (fgets(buf, sizeof(buf), fptr) != NULL) {
+            pid = atoi(buf);
+            //kill(pid, SIGINT);
+            
+			sprintf(cmd, "pidof %s", buf);
+            system(cmd);
+        }
+    }
+    if (fptr){
+        pclose(fptr);
+    }
+    return pid;
+}
+int KillProcessCat() {
+    FILE *fp;
+    char buf[256];
+
+    // 使用popen调用ps命令获取进程信息
+    fp = popen("ps aux | grep cat | grep -v grep | awk '{print $1}'", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error opening pipe!\n");
+        return -1;
+    }
+    // 逐行读取进程ID并杀死进程
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+		
+		WS_ERR("fgets data: %s\n", buf);
+        int pid = atoi(buf);
+        if (pid > 0) {
+            printf("Killing process with PID: %d\n", pid);
+            kill(pid, SIGKILL);
+        }
+    }
+
+    pclose(fp);
+
+    return 0;
+}
+
+int execute4GCmd(const char *strCmd, char *buffer) {
+    system(strCmd);
+
+    FILE *fp;
+    char buf[258];
+
+    fp = popen("cat /dev/ttyUSB2", "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error opening pipe!\n");
+        return -1;
+    } else {
+        WS_ERR("strCmd %s success\n", strCmd);
+    }
+
+    //usleep(1000 * 1000);
+	/*int i = 10;
+    while (i--) {
+		if(fgets(buf, sizeof(buf), fp) != NULL){
+	        WS_ERR("Received data: %s\n", buf);
+		
+	        if (strstr(buf, buffer) != NULL) {
+	            strcpy(buffer, buf);
+	            WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
+	            pclose(fp);
+	            return 0;
+	        } else {
+	            WS_ERR("Data does not match: %s\n", buf);
+	        }
+		}
+    }*/
+    int i = 10;
+	while(i--){
+		fflush(fp);
+        if (fgets(buf, sizeof(buf), fp) != NULL){
+			WS_ERR("Received data: %s\n", buf);
+            if (strstr(buf, buffer)){
+	            strcpy(buffer, buf);
+	            WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
+	            pclose(fp);
+	            return 0;
+                break;
+            } else if (strstr(buf, "OK")){
+                break;
+            } else if (strstr(buf, "ERROR")){
+                break;
+            }        
+        }
+    }
+	WS_ERR("KillProcessCat\n");
+	KillProcessCat();
+    /*pid_t pid = -1;
+	pid = KillProcessPidbyName("cat");
+		
+	WS_ERR ("killall cat end %d\n",pid);
+		pid = KillProcessPidbyName("cat");
+		
+	WS_ERR ("killall cat end %d\n",pid);
+			pid = KillProcessPidbyName("cat");
+		
+	WS_ERR ("killall cat end %d\n",pid);
+    /*while((pid = KillProcessPidbyName("cat")) > 0){
+        printf ("killall cat end\n");
+    }*/
+    pclose(fp);
+    return -1;
+}
+
+int dail4G()
+{
+
+	
+    char buffer[512];
+
+	memset(buffer,0,258);
+	strcpy(buffer, "+MDIALUPCFG: \"auto\",0");
+	ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",buffer);
+	if(ret == 0)
+	{	
+		WS_ERR("is not auto dail \n");
+		memset(buffer,0,258);
+		strcpy(buffer, "OK");
+		ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1' > /dev/ttyUSB2",buffer);
+		if(ret == 0)
+		{	
+			
+			WS_ERR("auto dail success \n");
+		}else{
+			WS_ERR("auto dail fail \n");
+		}
+		
+	}else{
+			WS_ERR("is auto dail \n");
+	}
+
+	memset(buffer,0,258);
+	strcpy(buffer, "MDIALUP");
+	ret = execute4GCmd("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
+	
+	WS_ERR("MDIALUP buffer is %s\n", buffer);
+	if (!hasIP(buffer)) {
+		memset(buffer,0,258);
+		strcpy(buffer, "OK");
+		ret = execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
+		if(ret == 0)
+		{
+			
+			WS_ERR("MDIALUP success\n");
+		}else{
+			
+			WS_ERR("MDIALUP fail\n");
+		}
+	}else{
+		
+		WS_ERR("MDIALUP hasIP\n");
+	}	
+	
+	//execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
+	
+	//memset(buffer,0,258);
+	//execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1\r\n' > /dev/ttyUSB2",buffer);
+	
+	memset(buffer,0,258);
+	strcpy(buffer, "MIPCALL");
+	ret = execute4GCmd("echo -e 'AT+MIPCALL?\r\n' > /dev/ttyUSB2",buffer);
+	if(ret == 0)
+	{
+		
+		WS_ERR("MIPCALL success\n");
+		if (hasIP(buffer)) {
+			
+			WS_ERR("MIPCALL hasIP\n");
+		}
+	}else{
+		
+		WS_ERR("MIPCALL fail");
+	}
+	system("udhcpc -i 4g0");
+}
+
+int check4G()
+{
+    FILE *fp;
+    char buffer[258];
+
+    fp = popen("cat /sys/class/net/4g0/carrier", "r");
+    if (fp == NULL) {
+        WS_ERR("Error opening pipe!\n");
+        return -1;
+    }
+	if(fgets(buffer, 64, fp)!= NULL){
+	if (strstr(buffer, "1") != NULL) {
+	    WS_ERR("4g is available\n", buffer);
+		
+			memset(buffer,0,258);
+		strcpy(buffer, "MDIALUP");
+		ret = execute4GCmd("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
+		if (!hasIP(buffer)) {
+			memset(buffer,0,258);
+			strcpy(buffer, "OK");
+			ret = execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
+			if(ret == 0)
+			{
+				
+				WS_ERR("MDIALUP success\n");
+			}else{
+				
+				WS_ERR("MDIALUP fail\n");
+			}
+		}else{
+			
+			WS_ERR("MDIALUP hasIP\n");
+		}
+	}
+	}else{
+		WS_ERR("4g is not available", buffer);
+		dail4G();
+		pclose(fp);
+		return -1;
+	}
+	pclose(fp);
+	return 0;
+
+}
 
 int au_server_init(char *get_ip)
 {
@@ -2557,6 +2945,7 @@ int netlink_check()
 	close(net_fd);
 
 }
+
 int net_stat;
 static int heart = 0;
 static int nopong_cnt = 0;
@@ -2652,6 +3041,10 @@ int setrecdataca11(handleData callback)
 			
 		return 0;
 	}else{
+		if(!errno)
+		{
+			return 0;
+		}
 		WS_INFO("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
 		return -1;
 	}

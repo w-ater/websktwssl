@@ -106,7 +106,8 @@ int main(int argc,char *argv[])
         printf("静态库测试 : \n");
 		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
 		WS_GET_SN(snstr);
-		
+		//check4G();
+		dail4G();
 		ret = au_server_init(ip);
 		if (ret < 0)
 		{
@@ -138,6 +139,7 @@ int main(int argc,char *argv[])
 				if (ret < 0)
 				{
 					printf("******disconnect server******\n");
+					check4G();
 					closewsl();
 					//break;
 					ret = au_server_init(ip);
@@ -155,6 +157,8 @@ int main(int argc,char *argv[])
 					//printf("No receive data   !!\r\n");
 				}else{
 					printf("******disconnect server******\n");
+					
+					check4G();
 					closewsl();
 					//break;
 					ret = au_server_init(ip);
