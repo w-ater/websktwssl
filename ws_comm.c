@@ -2609,9 +2609,101 @@ int execute4GCmd3(const char *strCmd, char *buffer)
     pclose(fp);
     return -1;
 }
-#define TIMEOUT_SEC 5
 
+#define TIMEOUT_SEC 3
+
+int get4GSerialOutput(const char *strCmd, char *buffer) {
+    char cmd[256];
+    sprintf(cmd, "%s;cat /dev/ttyUSB2", strCmd);
+    FILE *fp;
+    char buf[256];
+    char tempBuf[256] = "";
+	unsigned int msgLine = 0;
+
+
+    fp = popen(cmd, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error opening pipe!\n");
+        return -1;
+    } else {
+         //WS_ERR("strCmd %s success\n", strCmd);
+    }
+
+    int fd = fileno(fp);
+	
+    fd_set readfds;
+    struct timeval timeout;
+    FD_ZERO(&readfds);
+    FD_SET(fd, &readfds);
+
+    timeout.tv_sec = TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+	
+    while (1) {
+		int ret = select(fd + 1, &readfds, NULL, NULL, &timeout);
+	    if (ret == -1) {
+	        perror("select failed");
+	        KillProcessCat();
+	        pclose(fp);
+	        return -2;
+	    } else if (ret == 0) {
+			if(msgLine > 1){
+				
+				WS_ERR("msg: %s \n",tempBuf);
+				memcpy(buffer,tempBuf,256);
+			
+				WS_ERR("msgbuffer: %s \n",buffer);
+				KillProcessCat();
+		        pclose(fp);				
+				return 0;
+			}else{				
+				WS_ERR("Timeout occurredstrCmd %s success\n", strCmd);
+		        KillProcessCat();
+		        pclose(fp);
+		        return -2;
+			}
+	    }else{
+			if (fgets(buf, sizeof(buf), fp) != NULL) {
+				if (strlen(buf) > 1) {
+					msgLine++;
+					WS_ERR("Received data: msgLine:%d len:%d%s,%d\n",msgLine, strlen(buf),buf);
+					strcat(tempBuf, buf);
+					tempBuf[255]='\0';
+					//WS_ERR("tempBuf %s \n",tempBuf);
+
+				}
+			}
+		}
+		
+    }
+}
 int execute4GCmd(const char *strCmd, char *buffer) {
+	
+    char buf[256];
+	ret = get4GSerialOutput(strCmd,buf);
+	if(!ret){
+		if (strstr(buf, buffer)) {
+			strcpy(buffer, buf);
+			WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
+			return 0;
+		} else if (strstr(buf, "OK")) {
+			
+			WS_ERR("OK\n");
+		} else if (strstr(buf, "ERROR")) {
+			
+			WS_ERR("ERROR\n");
+		}
+		
+		return -1;
+
+	}else if (ret == -2){
+		WS_ERR("select failed or Timeout occurred try again\n");	
+		return -2;
+	}
+}
+
+int execute4GCmd2(const char *strCmd, char *buffer) {
     char cmd[258];
     sprintf(cmd, "%s;cat /dev/ttyUSB2", strCmd);
     FILE *fp;
@@ -2682,18 +2774,18 @@ int execute4GCmd(const char *strCmd, char *buffer) {
 int dail4G()
 {
 
-    int dailCnt;
-    int autoDailCnt;
-    char buffer[258];
+    int dailCnt = 0;
+    int autoDailCnt = 0;
+    char buffer[256]={0};
 autodail:
 
-	memset(buffer,0,258);
+	memset(buffer,0,256);
 	strcpy(buffer, "+MDIALUPCFG: \"auto\",0");
 	ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",buffer);
 	if(ret == 0)
 	{	
 		WS_ERR("is not auto dail \n");
-		memset(buffer,0,258);
+		memset(buffer,0,256);
 		strcpy(buffer, "OK");
 		ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1' > /dev/ttyUSB2",buffer);
 		if(ret == 0)
@@ -2708,7 +2800,7 @@ autodail:
 	}else if(ret == -1){
 			WS_ERR("is auto dail \n");
 	}else if(ret == -2){
-			WS_ERR("select failed or Timeout occurred try again\n");			
+			WS_ERR("select failed or Timeout occurred try again,%d\n",autoDailCnt);			
 			if(autoDailCnt++ < 3){
 				goto autodail;
 			}else{
@@ -2720,7 +2812,7 @@ autodail:
 	}
 dail:
 
-	memset(buffer,0,258);
+	memset(buffer,0,256);
 	strcpy(buffer, "MDIALUP");
 	ret = execute4GCmd("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
 	if(ret == -2){
@@ -2736,7 +2828,7 @@ dail:
 	}
 	WS_ERR("MDIALUP buffer is %s\n", buffer);
 	if (!hasIP(buffer)) {
-		memset(buffer,0,258);
+		memset(buffer,0,256);
 		strcpy(buffer, "OK");
 		ret = execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
 		if(ret == 0)
@@ -2758,7 +2850,7 @@ dail:
 	//memset(buffer,0,258);
 	//execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1\r\n' > /dev/ttyUSB2",buffer);
 	
-	memset(buffer,0,258);
+	memset(buffer,0,256);
 	strcpy(buffer, "MIPCALL");
 	ret = execute4GCmd("echo -e 'AT+MIPCALL?\r\n' > /dev/ttyUSB2",buffer);
 	if(ret == 0)
@@ -2860,10 +2952,10 @@ int au_server_init(char *get_ip)
 
 #else
 	WS_INFO("universal version\r\n");
-	memset(ip, 0, sizeof(ip));
+	//memset(ip, 0, sizeof(ip));
 	//ip = get_ip;
-	strcpy(ip, get_ip);
-	WS_INFO("ip %s !!\r\n",ip);
+	//strcpy(ip, get_ip);
+	//WS_INFO("ip %s !!\r\n",ip);
 	
     //用本进程pid作为唯一标识
     pid = getpid();
@@ -3103,5 +3195,186 @@ int setrecdataca11(handleData callback)
 	//callback(recv_buff,sizeof(recv_buff));
 	return  ret;
 }
+
+
+typedef int (*Ondata)(char* data, int length);
+typedef int (*OnStatus)(bool is4gOk, bool isSgOk);
+
+
+
+bool isSg = false;
+bool is4G = false;
+int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
+{
+    int ret = 0;
+    int hbSel = 1;
+
+    WS_GET_SN(snStr);
+
+    ret = dail4G();
+    WS_INFO("dail4G ret %d\n", ret);
+
+    if (!ret) {
+        is4G = true;
+        WS_INFO("dail4G is4G %d\n", is4G);
+    } else {
+        is4G = false;
+        WS_INFO("dail4G is4G %d\n", is4G);
+    }
+
+    if (is4G) {
+        WS_INFO("!!!!ip %s !!\r\n", ip);
+        ret = au_server_init(ip);
+        if (ret < 0) {
+            WS_INFO("au fail\n");
+            // return -1;
+        }
+    }
+
+    while (1) {
+        ret = sendHeart(hbSel);
+        ret += setrecdataca11(handleJson);
+        if (ret >= 0) {
+            isSg = true;
+            linkStatus(&is4G, &isSg);
+        } else if (ret == 0) {
+            WS_INFO("No receive data !!\r\n");
+            isSg = true;
+            linkStatus(&is4G, &isSg);
+        } else {
+            WS_INFO("******disconnect server******\n");
+
+            isSg = false;
+            linkStatus(&is4G, &isSg);
+            closewsl();
+
+            if (!is4G) {
+                ret = dail4G();
+                if (!ret) {
+                    is4G = true;
+                } else {
+                    is4G = false;
+                }
+            }
+
+            ret = check4GDail();
+            if (!ret) {
+                is4G = true;
+                WS_INFO("dail4G is4G %d\n", is4G);
+            } else {
+                is4G = false;
+                WS_INFO("dail4G is4G %d\n", is4G);
+            }
+
+            if (is4G) {
+                ret = au_server_init(ip);
+                if (ret < 0) {
+                    isSg = false;
+                    continue;
+                }
+            }
+        }
+
+        usleep(10000);
+    }
+
+    printf("connect exit !!\r\n");
+
+    return 0;
+}
+#if 0
+int wslConnect2(char *snStr, Ondata handleJson, OnStatus linkStatus)
+{
+	
+	bool *isSg=0;
+	bool *is4G=0;
+  	int hbSel = 1;
+	
+	WS_GET_SN(snStr);
+	//check4G();
+	ret = dail4G();
+	WS_INFO("dail4G ret%d\n",ret);
+	if(!ret){
+		
+		*is4G = 1;
+		
+		WS_INFO("dail4G *is4G%d\n",*is4G);
+	}else{
+		*is4G = 0;
+		
+		WS_INFO("dail4G *is4G%d\n",*is4G);
+	}
+	if(*is4G)
+	{
+		
+	WS_INFO("!!!!ip %s !!\r\n",ip);
+		ret = au_server_init(ip);
+		if (ret < 0)
+		{
+			WS_INFO("au fail\n");
+			//return -1;
+		}
+	}
+
+	while(1){
+			ret = sendHeart(hbSel);
+			ret += setrecdataca11(handleJson);
+			if (ret >= 0)
+			{
+				*isSg = 1;
+				linkStatus(is4G,isSg);
+			}else if(ret == 0){
+				WS_INFO("No receive data	!!\r\n");
+				*isSg = 1;
+				linkStatus(is4G,isSg);
+			}else{
+				WS_INFO("******disconnect server******\n");
+				
+				*isSg = 0;
+				
+				linkStatus(is4G,isSg);
+				closewsl();
+				if(!is4G){						
+					ret = dail4G();
+					if(!ret){
+						*is4G = 1;
+					}else{
+						*is4G = 0;
+					}
+				}
+				ret = check4GDail();
+				if(!ret){
+					
+					*is4G = 1;
+				
+					WS_INFO("dail4G *is4G%d\n",*is4G);
+				}else{
+					*is4G = 0;
+					
+					WS_INFO("dail4G *is4G%d\n",*is4G);
+				}
+				//break;
+				if(*is4G = 1)
+				{
+					ret = au_server_init(ip);
+					if(ret < 0){
+						*isSg=0;
+						continue;
+					}
+				}
+			}
+			
+			//printf("******\nconnect server******\n");
+		//}
+		usleep(10000);
+	}
+
+	printf("connect exit !!\r\n");	
+
+	return 0;
+
+}
+#endif
+
 
 #endif

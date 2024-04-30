@@ -6,6 +6,7 @@
 #include "wsl.h"
 #include <pthread.h>
 #include <errno.h>
+#include <stdbool.h>
 
 //发包数据量 10K
 #define SEND_PKG_MAX (1024 * 10)
@@ -19,7 +20,6 @@
 char recv_buff1[256];
 char send_buff2[256];
 int isConnected=0;
-int is4G=0;
 
 
 static int quit = 0;
@@ -55,6 +55,12 @@ static void ws_buildtest(char* str, char* package)
 int handleData(char* data, int length) {
     printf("Received data: %s\n", data);
 }
+typedef int (*OnStatus)(bool is4gOk, bool isSgOk);
+
+int GetStatus(bool is4gOk, bool isSgOk) {
+    printf("OnStatus is4gOk %d isSgOk: %d\n", is4gOk,isSgOk);
+}
+
 void sendata(void *arg)
 {
 	int rett;
@@ -106,99 +112,11 @@ int main(int argc,char *argv[])
 		//SSL *ssl = NULL;
 
         printf("静态库测试 : \n");
+		
+		//ret = get4GSerialOutput("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",send_buff2);
+		//return 0;
 		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
-		WS_GET_SN(snstr);
-		//check4G();
-		ret = dail4G();
-		
-		printf("dail4G ret%d\n",ret);
-		if(!ret){
-			
-			is4G = 1;
-		
-			printf("dail4G is4G%d\n",is4G);
-		}else{
-			is4G = 0;
-			
-			printf("dail4G is4G%d\n",is4G);
-		}
-		if(is4G)
-		{
-			ret = au_server_init(ip);
-			if (ret < 0)
-			{
-				printf("au fail\n");
-				//return -1;
-			}
-		}
-		//ret = IsWsClosed();
-		//closewsl();
-		char httpHead[512] = {0};
-		memset(httpHead, 0, sizeof(httpHead));   
-		//创建协议包
-		//ws_buildCode2001(httpHead); //组装http请求头
-
-		//wssend(httpHead, strlen((const char*)httpHead));
-		
-		//pthread_create(&p_send, 0, sendata, 0);
-		//pthread_join(p_send, NULL);
-
-		while(!quit){
-			/*if(IsWsClosed()==1){
-				printf("******disconnect server******\n");
-				isConnected=0;
-				au_server_init();
-				//exit(0);
-			}else{*/
-				//check_tcp_alive();
-				ret = sendHeart(1);
-				ret += setrecdataca11(handleData);
-				if (ret > 0)
-				{
-					isConnected=1;
-					printf("test!!!%s\r\n", recv_buff1);
-				}else if(ret == 0){
-					//printf("No receive data   !!\r\n");
-				}else{
-					printf("******disconnect server******\n");
-					closewsl();
-					if(!is4G){						
-						ret = dail4G();
-						if(!ret){
-							is4G = 1;
-						}else{
-							is4G = 0;
-						}
-					}
-					ret = check4GDail();
-					if(!ret){
-						
-						is4G = 1;
-					
-						printf("dail4G is4G%d\n",is4G);
-					}else{
-						is4G = 0;
-						
-						printf("dail4G is4G%d\n",is4G);
-					}
-					//break;
-					if(is4G = 1)
-					{
-						ret = au_server_init(ip);
-						if(ret < 0){
-							isConnected=0;
-							continue;
-						}
-					}
-				}
-				
-				//printf("******\nconnect server******\n");
-			//}
-			usleep(10000);
-		}
-
-		printf("connect exit !!\r\n");	
-
+		wslConnect(snstr,handleData,GetStatus);
         return 0;
 }
 
