@@ -17,8 +17,10 @@
 
 //int au_server_init(SSL **ssl);
 char recv_buff1[256];
-char send_buff[256];
+char send_buff2[256];
 int isConnected=0;
+int is4G=0;
+
 
 static int quit = 0;
 
@@ -57,19 +59,19 @@ void sendata(void *arg)
 {
 	int rett;
 	while(1){
-		memset(send_buff, 0, sizeof(send_buff));
+		memset(send_buff2, 0, sizeof(send_buff2));
 		printf("请输入send_str\n");
-		scanf("%s",send_buff); 
+		scanf("%s",send_buff2); 
 		
 		if(isConnected)
 		{
-			memset(send_buff, 0, sizeof(send_buff));   
+			memset(send_buff2, 0, sizeof(send_buff2));   
 			//创建协议包
-			ws_buildtest(send_buff,buffjson); //组装http请求头
+			ws_buildtest(send_buff2,buffjson); //组装http请求头
 			rett =	wssend(buffjson, strlen((const char*)buffjson));
 			if (rett > 0)
 			{
-				printf("rett %d send_buff%s\r\n", rett,buffjson);
+				printf("rett %d send_buff2%s\r\n", rett,buffjson);
 			}else if ((rett == 0) && (errno == EWOULDBLOCK || errno == EINTR)){
 				//printf("No receive data   !!\r\n");
 			}else{
@@ -107,14 +109,28 @@ int main(int argc,char *argv[])
 		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
 		WS_GET_SN(snstr);
 		//check4G();
-		dail4G();
-		ret = au_server_init(ip);
-		if (ret < 0)
-		{
-			printf("au fail\n");
-			//return -1;
-		}
+		ret = dail4G();
 		
+		printf("dail4G ret%d\n",ret);
+		if(!ret){
+			
+			is4G = 1;
+		
+			printf("dail4G is4G%d\n",is4G);
+		}else{
+			is4G = 0;
+			
+			printf("dail4G is4G%d\n",is4G);
+		}
+		if(is4G)
+		{
+			ret = au_server_init(ip);
+			if (ret < 0)
+			{
+				printf("au fail\n");
+				//return -1;
+			}
+		}
 		//ret = IsWsClosed();
 		//closewsl();
 		char httpHead[512] = {0};
@@ -136,19 +152,7 @@ int main(int argc,char *argv[])
 			}else{*/
 				//check_tcp_alive();
 				ret = sendHeart(1);
-				if (ret < 0)
-				{
-					printf("******disconnect server******\n");
-					check4G();
-					closewsl();
-					//break;
-					ret = au_server_init(ip);
-					if(ret < 0){
-						isConnected=0;
-						continue;
-					}
-				}
-				ret = setrecdataca11(handleData);
+				ret += setrecdataca11(handleData);
 				if (ret > 0)
 				{
 					isConnected=1;
@@ -157,14 +161,34 @@ int main(int argc,char *argv[])
 					//printf("No receive data   !!\r\n");
 				}else{
 					printf("******disconnect server******\n");
-					
-					check4G();
 					closewsl();
+					if(!is4G){						
+						ret = dail4G();
+						if(!ret){
+							is4G = 1;
+						}else{
+							is4G = 0;
+						}
+					}
+					ret = check4GDail();
+					if(!ret){
+						
+						is4G = 1;
+					
+						printf("dail4G is4G%d\n",is4G);
+					}else{
+						is4G = 0;
+						
+						printf("dail4G is4G%d\n",is4G);
+					}
 					//break;
-					ret = au_server_init(ip);
-					if(ret < 0){
-						isConnected=0;
-						continue;
+					if(is4G = 1)
+					{
+						ret = au_server_init(ip);
+						if(ret < 0){
+							isConnected=0;
+							continue;
+						}
 					}
 				}
 				
