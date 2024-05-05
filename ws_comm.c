@@ -41,6 +41,7 @@
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include "./wolfssl/openssl/ssl.h"  //wolfssl转openssl的兼容层
+#include "wsl.h"
 
 
 //发包数据量 10K
@@ -110,7 +111,11 @@ int get_port = SERVER_PORT;
 char ip[32] = SERVER_IP;
 char path[64] = SERVER_PATH;
 int recv_len;
-	
+
+int net_stat;
+static int heart = 0;
+static int nopong_cnt = 0;
+
 static void WS_HEX(FILE* f, void* dat, uint32_t len)
 {
     uint8_t* p = (uint8_t*)dat;
@@ -1128,7 +1133,50 @@ static int32_t ws_enPackage(
  * 说明:
  *      建议recv时先接收14字节然后解包,根据返回缺失长度再recv一次,最后再解包,这样可有效避免连包时只解析到一包的问题
  ******************************************************************************/
-static int32_t ws_dePackage(
+ static int32_t ws_dePackage(
+    uint8_t* data,
+    uint32_t len,
+    Ws_DataType* retPkgType)
+{
+    uint32_t cIn, cOut;
+    //包类型
+    uint8_t type;
+    //数据段起始位置
+    uint32_t dataOffset = 2;
+    //数据段长度
+    uint32_t dataLen = 0;
+    //掩码
+    uint8_t maskKey[4] = {0};
+    bool mask = false;
+    uint8_t maskCount = 0;
+    //数据长度过短
+    if (len < 2)
+        return 0;
+    //解析包类型
+    if ((data[0] & 0x80) == 0x80)
+    {
+        type = data[0] & 0x0F;
+        if (type == 0x00)
+            *retPkgType = WDT_MINDATA;
+        else if (type == 0x01)
+            *retPkgType = WDT_TXTDATA;
+        else if (type == 0x02)
+            *retPkgType = WDT_BINDATA;
+        else if (type == 0x08)
+            *retPkgType = WDT_DISCONN;
+        else if (type == 0x09)
+            *retPkgType = WDT_PING;
+        else if (type == 0x0A)
+            *retPkgType = WDT_PONG;
+        else
+            return 0;
+    }
+    else
+        return 0;
+	
+	return 0;
+}
+static int32_t ws_dePackage2(
     uint8_t* data,
     uint32_t len,
     uint32_t* retDataLen,
@@ -1353,6 +1401,7 @@ int check_tcp_alive()
 
 int closewsl()
 {
+	nopong_cnt = 0;
     if (myssl != NULL) {
         WS_INFO("Fun:%s Close SSL\n", __FUNCTION__);
 		ret = wolfSSL_shutdown(myssl);
@@ -2079,6 +2128,83 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
     uint32_t retHeadLen = 0; //解包得到的包头部长度
     int32_t retFinal = 0;    //最终返回
     uint32_t timeout = 0;    //接收超时计数
+    
+    uint8_t type;
+
+    char tmp[16]; //为防止一次接收到多包数据(粘包),先尝试性接收ws头部字节,得知总长度后再接收剩下部分
+    Ws_DataType retPkgType = WDT_NULL; //默认返回包类型
+    char* cBuff = (char*)buff; //转换指针类型
+
+    //丢弃数据
+    if (!buff || buffSize < 1)
+    {
+		//while (recv(fd, tmp, sizeof(tmp), MSG_NOSIGNAL) > 0)
+		while (wolfSSL_read(myssl, tmp, sizeof(tmp)) > 0)
+            ;
+    }
+    //先接收数据头部,头部最大2+4+8=14字节
+    else
+    {
+		//retRecv = recv(fd, buff, 14, MSG_NOSIGNAL);
+		retRecv = wolfSSL_read(myssl, buff, buffSize);		
+		ws_dePackage(buff,retRecv,&retPkgType);
+		
+		WS_INFO("retRecv %d retPkgType %x\n",retRecv,retPkgType);
+		if(retRecv > 0)
+		{
+
+			memset(buff,0,buffSize);
+			retRecv = wolfSSL_read(myssl, buff, buffSize);		
+				
+			WS_INFO("retRecv %d buff %s\n",retRecv,buff);
+
+			//收到 PING 包,应自动回复 PONG
+			if (retPkgType == WDT_PING)
+			{
+			    //自动 ping-pong
+			    //ws_send(fd, NULL, 0, false, WDT_PONG);
+			    WS_INFO("ws_recv: WDT_PING\r\n");
+			    retFinal = 0;
+			}
+			//收到 PONG 包
+			else if (retPkgType == WDT_PONG)
+			{
+			    //WS_INFO("ws_recv: WDT_PONG\r\n");
+			    retFinal = 0;
+			}
+			//收到 断连 包
+			else if (retPkgType == WDT_DISCONN)
+			{
+			    WS_INFO("ws_recv: WDT_DISCONN\r\n");
+			    retFinal = 0;
+			}
+			//其它正常数据包
+			else
+			    retFinal = retRecv;
+		}else{
+    	
+			WS_INFO("retRecv %d\r\n",retRecv);
+			return retRecv;
+		}
+    }
+	
+	WS_INFO("retRecv %d buff %s\n",retRecv,buff);
+	*retType = retPkgType;
+
+   
+    return retFinal;
+}
+#if 0
+
+int32_t ws_recv2(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
+{
+    int32_t ret;
+    int32_t retRecv = 0;     //调用recv的返回
+    int32_t retDePkg;        //调用解包的返回
+    uint32_t retDataLen = 0; //解包得到的数据段长度
+    uint32_t retHeadLen = 0; //解包得到的包头部长度
+    int32_t retFinal = 0;    //最终返回
+    uint32_t timeout = 0;    //接收超时计数
 
     char tmp[16]; //为防止一次接收到多包数据(粘包),先尝试性接收ws头部字节,得知总长度后再接收剩下部分
     Ws_DataType retPkgType = WDT_NULL; //默认返回包类型
@@ -2192,9 +2318,9 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
             }
 #ifdef WS_DEBUG
             //显示数据
-            WS_INFO("ws_recv3: len/%d retDePkg/%d retDataLen/%d retHeadLen/%d retPkgType/%d\r\n",
-                    retRecv, retDePkg, retDataLen, retHeadLen, retPkgType);
-            WS_HEX(stdout, buff, retRecv);
+            //WS_INFO("ws_recv3: len/%d retDePkg/%d retDataLen/%d retHeadLen/%d retPkgType/%d\r\n",
+                  //  retRecv, retDePkg, retDataLen, retHeadLen, retPkgType);
+            //WS_HEX(stdout, buff, retRecv);
 #endif
             //一包数据终于完整的接收完了...
             if (retDePkg > 0)
@@ -2238,7 +2364,7 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
 
     return retFinal;
 }
-
+#endif
 #if 1 // 发收包测试
 /* 
 int base64_encode(char *in_str, int in_len, char *out_str)
@@ -2612,7 +2738,8 @@ int execute4GCmd3(const char *strCmd, char *buffer)
 
 #define TIMEOUT_SEC 3
 
-int get4GSerialOutput(const char *strCmd, char *buffer) {
+int get4GSerialOutput(const char *strCmd, char *buffer) 
+{
     char cmd[256];
     sprintf(cmd, "%s;cat /dev/ttyUSB2", strCmd);
     FILE *fp;
@@ -2899,7 +3026,7 @@ int check4GDail()
 	if(fgets(buffer, 64, fp)!= NULL){
 	if (strstr(buffer, "1") != NULL) {
 	    WS_ERR("4g is available %s\n", buffer);
-		
+		return 0;
 		memset(buffer,0,258);
 		strcpy(buffer, "MDIALUP");
 		ret = execute4GCmd("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
@@ -2939,7 +3066,7 @@ int check4GDail()
 
 }
 
-int au_server_init(char *get_ip)
+int au_server_init()
 {
 
 #ifdef FIREALARM
@@ -2952,10 +3079,10 @@ int au_server_init(char *get_ip)
 
 #else
 	WS_INFO("universal version\r\n");
-	//memset(ip, 0, sizeof(ip));
-	//ip = get_ip;
-	//strcpy(ip, get_ip);
-	//WS_INFO("ip %s !!\r\n",ip);
+	memset(path, 0, sizeof(path));
+	char pathDemo[] = "/server";
+	sprintf(path, pathDemo);
+	strcpy(ip, "ipc.daguiot.com");
 	
     //用本进程pid作为唯一标识
     pid = getpid();
@@ -3000,7 +3127,7 @@ int au_server_init(char *get_ip)
 	char *result;
 
 	int recvCount = 3; // 设置最大重试次数
-	while(recvCount > 0)
+	while(recvCount-- > 0)
 	{
 		//接收数据
 
@@ -3040,7 +3167,7 @@ int au_server_init(char *get_ip)
 
 		}else if(ret < 0){
 			WS_INFO("recv <= 0 !!\r\n");
-			recvCount--;
+			//recvCount--;
 		}
 		ws_delayms(10);
 
@@ -3088,9 +3215,6 @@ int netlink_check()
 
 }
 
-int net_stat;
-static int heart = 0;
-static int nopong_cnt = 0;
 
 int sendHeart(int selInterval)
 {
@@ -3162,10 +3286,10 @@ int setrecdataca11(handleData callback)
     else if (retPkgType == WDT_PONG){
 		nopong_cnt--;
         WS_INFO("client: recv WDT_PONG %d\r\n", nopong_cnt);
-    }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
+    }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR)){		//EWOULDBLOCK,EINTR 11 4
 		WS_INFO("No receive data   !!\r\n");
 		
-		//WS_INFO("ret %d %s%d\n", ret ,strerror(errno),errno); 
+		WS_INFO("ret %d %s%d\n", ret ,strerror(errno),errno); 
 		//if(net_stat++ > 1)
 		if(0)
 		{
@@ -3184,26 +3308,26 @@ int setrecdataca11(handleData callback)
 			
 		return 0;
 	}else{
-		if(!errno)
-		{
-			return 0;
-		}
-		WS_INFO("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
+
+		WS_INFO("abnormal connection  ret%d  errno%d!!\r\n",ret,errno);
 		return -1;
 	}
-
-	//callback(recv_buff,sizeof(recv_buff));
 	return  ret;
 }
 
 
-typedef int (*Ondata)(char* data, int length);
-typedef int (*OnStatus)(bool is4gOk, bool isSgOk);
+void ws_buildCode1(char* package)
+{
+    const char CheckToken[] = "{\"code\":1,\"message\":\"deviceinfo\",\"data\":{\"iccid\":\"\",\"link\":0,\"use\":0,\"sn\":\"6902200010110823\",\"hv\":\"TX5112CV300\",\"sv\":\"v1.0.0.1\"}}";
+
+    sprintf(package, CheckToken);
+	printf("package %s\n",package);
+
+}
 
 
-
-bool isSg = false;
-bool is4G = false;
+static bool isSg = 0;
+static bool is4G = 0;
 int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 {
     int ret = 0;
@@ -3224,7 +3348,7 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 
     if (is4G) {
         WS_INFO("!!!!ip %s !!\r\n", ip);
-        ret = au_server_init(ip);
+        ret = au_server_init();
         if (ret < 0) {
             WS_INFO("au fail\n");
             // return -1;
@@ -3234,17 +3358,11 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
     while (1) {
         ret = sendHeart(hbSel);
         ret += setrecdataca11(handleJson);
-        if (ret >= 0) {
-            isSg = true;
-            linkStatus(&is4G, &isSg);
-        } else if (ret == 0) {
-            WS_INFO("No receive data !!\r\n");
-            isSg = true;
-            linkStatus(&is4G, &isSg);
-        } else {
+		if(ret < 0){
             WS_INFO("******disconnect server******\n");
-
-            isSg = false;
+			is4G = 0;
+            isSg = 0;
+			WS_INFO("OnStatus is4G %d isSg %d\n", is4G, isSg);
             linkStatus(&is4G, &isSg);
             closewsl();
 
@@ -3267,18 +3385,32 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
             }
 
             if (is4G) {
-                ret = au_server_init(ip);
+                ret = au_server_init();
                 if (ret < 0) {
                     isSg = false;
                     continue;
                 }
             }
-        }
+        }	else if (ret > 0) {
+            isSg = 1;
+            linkStatus(&is4G, &isSg);
+        } else{
+            WS_INFO("No receive data !!\r\n");
+            isSg = 1;
+            linkStatus(&is4G, &isSg);
+        }	
+		
+		char httpHead[512] = {0};
+		memset(httpHead, 0, sizeof(httpHead));   
+		//创建协议包
+		ws_buildCode1(httpHead); //组装http请求头
+
+		wssend(httpHead, strlen((const char*)httpHead));
 
         usleep(10000);
     }
 
-    printf("connect exit !!\r\n");
+    WS_INFO("connect exit !!\r\n");
 
     return 0;
 }

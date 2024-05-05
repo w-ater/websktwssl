@@ -5,17 +5,12 @@
 extern "C"
 {
 #endif
+typedef void (*Ondata)(char* data, int length);
+typedef void (*OnStatus)(int *is4gOk, int *isSgOk);
 
+int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus);
 
-int au_server_init(char *get_ip);
-
-int setrecdataca11(int (*handleData)(char* data, int length));
-
-int wssend(char *buf,int len);
-
-//int IsWsClosed();
-
-int closewsl();
+int get4GSerialOutput(const char *strCmd, char *buffer);
 
 #ifdef __cplusplus
 }

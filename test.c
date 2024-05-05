@@ -39,6 +39,15 @@ void ws_buildCode2001(char* package)
 
 }
 
+void ws_buildCode01(char* package)
+{
+    const char CheckToken[] = "{\"code\":1,\"message\":\"deviceinfo\",\"data\":{\"iccid\":\"\",\"link\":0,\"use\":0,\"sn\":\"6902200010110823\",\"hv\":\"TX5112CV300\",\"sv\":\"v1.0.0.1\"}}";
+
+    sprintf(package, CheckToken);
+	printf("package %s\n",package);
+
+}
+
 char buffjson[256] = {0};
 static void ws_buildtest(char* str, char* package)
 {
@@ -55,10 +64,9 @@ static void ws_buildtest(char* str, char* package)
 int handleData(char* data, int length) {
     printf("Received data: %s\n", data);
 }
-typedef int (*OnStatus)(bool is4gOk, bool isSgOk);
 
-int GetStatus(bool is4gOk, bool isSgOk) {
-    printf("OnStatus is4gOk %d isSgOk: %d\n", is4gOk,isSgOk);
+int GetStatus(bool *is4gOk, bool *isSgOk) {
+    printf("OnStatus is4gOk %d isSgOk: %d\n", *is4gOk,*isSgOk);
 }
 
 void sendata(void *arg)
