@@ -96,6 +96,48 @@ void sendata(void *arg)
 	}
 
 }
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+
+#define MAX_BUF_SIZE 256
+#define MAX_MSG_LINES 100
+
+int main2() {
+    FILE *fp;
+    char buf[MAX_BUF_SIZE];
+    char tempBuf[MAX_BUF_SIZE * MAX_MSG_LINES] = "";
+    unsigned int msgLine = 0;
+
+    fp = fopen("ATOutput.txt", "r");
+    if (fp == NULL) {
+        perror("Error opening file");
+        return -1;
+    }
+
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+        if (strlen(buf) > 1) {
+            msgLine++;
+            printf("output_fd data: msgLine:%d len:%d%s,%d\n", msgLine, (int)strlen(buf), buf);
+            strncat(tempBuf, buf, sizeof(tempBuf) - strlen(tempBuf) - 1);
+
+            if (msgLine >= MAX_MSG_LINES) {
+                break; // 限制读取的行数
+            }
+        }
+    }
+
+    fclose(fp);
+
+    // 将读取的内容复制到buffer中
+    char buffer[MAX_BUF_SIZE];
+    strncpy(buffer, tempBuf, sizeof(buffer) - 1);
+    buffer[MAX_BUF_SIZE - 1] = '\0';
+
+    printf("Final buffer content: %s\n", buffer);
+
+    return 0;
+}
 
 int main(int argc,char *argv[])
 {
@@ -123,6 +165,7 @@ int main(int argc,char *argv[])
 		
 		//ret = get4GSerialOutput("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",send_buff2);
 		//return 0;
+		ensure4gConnection();
 		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
 		wslConnect(snstr,handleData,GetStatus);
         return 0;

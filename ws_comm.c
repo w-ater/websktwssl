@@ -88,6 +88,7 @@
 #define WS_INFO(...) fprintf(stdout, "[WS_INFO] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stdout, __VA_ARGS__)
 #endif
 
+#define MY_BUF_SIZE 256
 
 
 SSL *myssl = NULL;
@@ -102,7 +103,7 @@ char recv_buff[RECV_PKG_MAX];
 char send_buff[SEND_PKG_MAX];
 unsigned char token_checksume[64];
 unsigned char token_checksume1[128];
-char tokenjson[256] = {0};
+char tokenjson[MY_BUF_SIZE] = {0};
 
 //char ctoken_checksume[128];
 
@@ -115,6 +116,9 @@ int recv_len;
 int net_stat;
 static int heart = 0;
 static int nopong_cnt = 0;
+static bool isSg = 0;
+static bool is4G = 0;
+
 
 static void WS_HEX(FILE* f, void* dat, uint32_t len)
 {
@@ -157,7 +161,7 @@ char* ws_time(void)
 typedef struct
 {
     pthread_t thread_id;
-    char ip[256];
+    char ip[MY_BUF_SIZE];
     bool result;
     bool actionEnd;
 } GetHostName_Struct;
@@ -560,7 +564,7 @@ static void ws_getRandomString(char* buff, uint32_t len)
     srand((int32_t)time(0));
     for (i = 0; i < len; i++)
     {
-        temp = (uint8_t)(rand() % 256);
+        temp = (uint8_t)(rand() % MY_BUF_SIZE);
         if (temp == 0) //随机数不要0
             temp = 128;
         buff[i] = temp;
@@ -653,7 +657,7 @@ static int32_t ws_buildRespondShakeKey(char* acceptKey, uint32_t acceptKeyLen, c
 static int32_t ws_matchShakeKey(char* clientKey, int32_t clientKeyLen, char* acceptKey, int32_t acceptKeyLen)
 {
     int32_t retLen;
-    char tempKey[256] = {0};
+    char tempKey[MY_BUF_SIZE] = {0};
 
     retLen = ws_buildRespondShakeKey(clientKey, clientKeyLen, tempKey);
     if (retLen != acceptKeyLen)
@@ -982,8 +986,8 @@ static void ws_buildHttpRespond(char* acceptKey, uint32_t acceptKeyLen, char* pa
         "%s\r\n\r\n"; //时间打包待续, 格式如 "Date: Tue, 20 Jun 2017 08:50:41 CST\r\n"
     time_t now;
     struct tm *tm_now;
-    char timeStr[256] = {0};
-    char respondShakeKey[256] = {0};
+    char timeStr[MY_BUF_SIZE] = {0};
+    char respondShakeKey[MY_BUF_SIZE] = {0};
     //构建回应的握手key
     ws_buildRespondShakeKey(acceptKey, acceptKeyLen, respondShakeKey);
     //构建回应时间字符串
@@ -2074,11 +2078,24 @@ int32_t ws_send(SSL *myssl, void* buff, int32_t buffLen, bool mask, Ws_DataType 
 
     //ret = send(fd, wsPkg, retLen, MSG_NOSIGNAL);
 	ret = wolfSSL_write(myssl, wsPkg, retLen);
+	if (ret > 0) {
+	// 数据成功写入
+			WS_INFO("数据成功写入%d\n",ret);
+	}else if (ret == 0) {
+		
+		WS_INFO("Connection closed by peer\n");
+		return -1;
+	}else {
+		
+		WS_INFO("Handle error\n");
+		return -1;
+	}
+
 	
     free(wsPkg);
     return ret;
 }
-int wssend(char *buf,int data_len)
+int wssend2(char *buf,int data_len)
 {
 	//ret = ws_send(myssl, buf, len, true, WDT_TXTDATA);
 	memcpy(send_buff,buf,data_len);
@@ -2104,6 +2121,19 @@ int wssend(char *buf,int data_len)
     }
 
     return total_bytes_written;
+}
+int wssend(char *buf,int len)
+{
+	ret = ws_send(myssl, buf, len, true, WDT_TXTDATA);
+	//ret = wolfSSL_write(myssl, buf, len);
+	if (ret > 0) {
+	// 数据成功写入
+			WS_INFO("数据成功写入%d\n",ret);
+	} else {
+		// 发生错误
+			WS_INFO("发生错误%d\n",ret);
+	}
+	return ret;
 }
 
 /*******************************************************************************
@@ -2566,7 +2596,7 @@ bool hasIP2(const char *strSrc) {
     regfree(&regex);
 
     if (ret == 0) {
-        char ip[256];
+        char ip[MY_BUF_SIZE];
         snprintf(ip, sizeof(ip), "%.*s", (int)(match[0].rm_eo - match[0].rm_so), strSrc + match[0].rm_so);
         printf("find: %s\n", ip);
         return true;
@@ -2642,7 +2672,7 @@ pid_t KillProcessPidbyName2(char *name)
 {
     FILE *fptr;
     char buf[1056] = { 0 };
-    char cmd[256] = { 0 };
+    char cmd[MY_BUF_SIZE] = { 0 };
     pid_t pid = -1;
     sprintf(cmd, "pidof %s", name);
     if ((fptr = popen(cmd, "r")) != NULL) {
@@ -2659,12 +2689,17 @@ pid_t KillProcessPidbyName2(char *name)
     }
     return pid;
 }
-int KillProcessCat() {
+int KillProcessByName(char *processName) 
+{
     FILE *fp;
-    char buf[256];
-
+    char buf[MY_BUF_SIZE];
+	
+    char cmd[MY_BUF_SIZE] = { 0 };
+	sprintf(cmd, "ps aux | grep %s | grep -v grep | awk '{print $1}'", processName);
     // 使用popen调用ps命令获取进程信息
-    fp = popen("ps aux | grep cat | grep -v grep | awk '{print $1}'", "r");
+    //fp = popen("ps aux | grep cat | grep -v grep | awk '{print $1}'", "r");
+	
+    fp = popen(cmd, "r");
     if (fp == NULL) {
         fprintf(stderr, "Error opening pipe!\n");
         return -1;
@@ -2672,10 +2707,10 @@ int KillProcessCat() {
     // 逐行读取进程ID并杀死进程
     while (fgets(buf, sizeof(buf), fp) != NULL) {
 		
-		WS_ERR(" data: %s\n", buf);
+		WS_ERR(" processName %s pid: %s\n",processName, buf);
         int pid = atoi(buf);
         if (pid > 0) {
-            printf("Killing process with PID: %d\n", pid);
+            WS_INFO("Killing process with PID: %d\n", pid);
             kill(pid, SIGKILL);
         }
     }
@@ -2729,8 +2764,8 @@ int execute4GCmd3(const char *strCmd, char *buffer)
             }        
         }
     }
-	WS_ERR("KillProcessCat\n");
-	KillProcessCat();
+	WS_ERR("KillProcessByName\n");
+	KillProcessByName("cat");
 
     pclose(fp);
     return -1;
@@ -2740,13 +2775,14 @@ int execute4GCmd3(const char *strCmd, char *buffer)
 
 int get4GSerialOutput(const char *strCmd, char *buffer) 
 {
-    char cmd[256];
-    sprintf(cmd, "%s;cat /dev/ttyUSB2", strCmd);
+    char cmd[MY_BUF_SIZE];
+    sprintf(cmd, "%s && cat /dev/ttyUSB2", strCmd);
+    
+    //sprintf(cmd, "cat /dev/ttyUSB2 & %s;",strCmd);
     FILE *fp;
-    char buf[256];
-    char tempBuf[256] = "";
+    char buf[MY_BUF_SIZE];
+    char tempBuf[MY_BUF_SIZE] = "";
 	unsigned int msgLine = 0;
-
 
     fp = popen(cmd, "r");
     if (fp == NULL) {
@@ -2765,28 +2801,29 @@ int get4GSerialOutput(const char *strCmd, char *buffer)
 
     timeout.tv_sec = TIMEOUT_SEC;
     timeout.tv_usec = 0;
+	//system(strCmd);
 
 	
     while (1) {
 		int ret = select(fd + 1, &readfds, NULL, NULL, &timeout);
 	    if (ret == -1) {
 	        perror("select failed");
-	        KillProcessCat();
+	        KillProcessByName("cat");
 	        pclose(fp);
 	        return -2;
 	    } else if (ret == 0) {
 			if(msgLine > 1){
 				
 				WS_ERR("msg: %s \n",tempBuf);
-				memcpy(buffer,tempBuf,256);
+				memcpy(buffer,tempBuf,MY_BUF_SIZE);
 			
 				WS_ERR("msgbuffer: %s \n",buffer);
-				KillProcessCat();
+				KillProcessByName("cat");
 		        pclose(fp);				
 				return 0;
 			}else{				
-				WS_ERR("Timeout occurredstrCmd %s success\n", strCmd);
-		        KillProcessCat();
+				WS_ERR("Timeout occurred strCmd %s\n", strCmd);
+		        KillProcessByName("cat");
 		        pclose(fp);
 		        return -2;
 			}
@@ -2803,11 +2840,63 @@ int get4GSerialOutput(const char *strCmd, char *buffer)
 			}
 		}
 		
+        //usleep(10000);
     }
 }
+int ensureGet4GOutput(const char *strCmd, char *buffer) 
+{
+    char cmd[MY_BUF_SIZE];
+    sprintf(cmd, "cat /dev/ttyUSB2");
+    
+    //sprintf(cmd, "cat /dev/ttyUSB2 > ATOutput.txt &",strCmd);
+    FILE *fp;
+    char buf[MY_BUF_SIZE];
+    char tempBuf[MY_BUF_SIZE] = "";
+	unsigned int msgLine = 0;
+
+    fp = popen(cmd, "r");
+    if (fp == NULL) {
+        fprintf(stderr, "Error opening pipe!\n");
+        return -1;
+    } else {
+         WS_ERR("strCmd %s success\n", strCmd);
+    }
+
+    int fd = fileno(fp);
+	
+    // 将文件描述符设置为非阻塞模式
+    int flags = fcntl(fd, F_GETFL, 0);
+    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+	
+    fd_set readfds;
+    struct timeval timeout;
+    FD_ZERO(&readfds);
+    FD_SET(fd, &readfds);
+
+    timeout.tv_sec = 5;
+    timeout.tv_usec = 0;
+	system(strCmd);
+
+	
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+        if (strlen(buf) > 1) {
+            msgLine++;
+            WS_ERR("output_fd data: msgLine:%d len:%d%s,%d\n", msgLine, (int)strlen(buf), buf);
+            strncat(tempBuf, buf, sizeof(tempBuf) - strlen(tempBuf) - 1);
+							KillProcessByName("cat");
+		        pclose(fp);	
+				return 0;
+            if (msgLine >= 5) {
+                break; // 限制读取的行数
+            }
+        }
+    }
+
+}
+
 int execute4GCmd(const char *strCmd, char *buffer) {
 	
-    char buf[256];
+    char buf[MY_BUF_SIZE] = {0};
 	ret = get4GSerialOutput(strCmd,buf);
 	if(!ret){
 		if (strstr(buf, buffer)) {
@@ -2829,90 +2918,105 @@ int execute4GCmd(const char *strCmd, char *buffer) {
 		return -2;
 	}
 }
-
-int execute4GCmd2(const char *strCmd, char *buffer) {
-    char cmd[258];
-    sprintf(cmd, "%s;cat /dev/ttyUSB2", strCmd);
+int Get4GOutputBySaveFile(const char *strCmd, char *buffer) 
+{
+    char cmd[MY_BUF_SIZE];
+    //sprintf(cmd, "%s && cat /dev/ttyUSB2", strCmd);
+    
+    sprintf(cmd, "cat /dev/ttyUSB2 > ATOutput.txt &",strCmd);
     FILE *fp;
-    char buf[258];
+    char buf[MY_BUF_SIZE];
+    char tempBuf[MY_BUF_SIZE] = "";
+	unsigned int msgLine = 0;
 
-    fp = popen(cmd, "r");
-    if (fp == NULL) {
-        fprintf(stderr, "Error opening pipe!\n");
-        return -1;
-    } else {
-        WS_ERR("strCmd %s success\n", strCmd);
-    }
 
-    int fd = fileno(fp);
-
-    fd_set readfds;
-    struct timeval timeout;
-    FD_ZERO(&readfds);
-    FD_SET(fd, &readfds);
-
-    timeout.tv_sec = TIMEOUT_SEC;
-    timeout.tv_usec = 0;
-
-    int ret = select(fd + 1, &readfds, NULL, NULL, &timeout);
-    if (ret == -1) {
-        perror("select failed");		
-		KillProcessCat();
-        pclose(fp);
-        return -2;
-    } else if (ret == 0) {
-        printf("Timeout occurred\n");		
-		KillProcessCat();
-        pclose(fp);
-		printf("pclosed\n");	
-        return -2;
-    }
-
-    int i = 10;
-    while (i--) {
-        if (fgets(buf, sizeof(buf), fp) != NULL) {
-			if(strlen(buf)>1)
-			WS_ERR("Received data: %s,%d\n", buf,strlen(buf));
-
-            if (strstr(buf, buffer)) {
-                strcpy(buffer, buf);
-                WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
-                pclose(fp);
-                return 0;
-            } else if (strstr(buf, "OK")) {
-				
-				WS_ERR("OK\n");
-                break;
-            } else if (strstr(buf, "ERROR")) {
-				
-				WS_ERR("ERROR\n");
-                break;
-            }
+	
+	system("cat /dev/ttyUSB2 > ATOutput.txt &");
+	system(strCmd);
+	WS_ERR("strCmd %s success\n", strCmd);
+	
+	fp = fopen("ATOutput.txt" , "r");
+	if(fp == NULL) {
+	   perror("打开文件时发生错误");
+	   return(-1);
+	}
+    while (fgets(buf, sizeof(buf), fp) != NULL) {
+        if (strlen(buf) > 1) {
+            msgLine++;
+            WS_INFO("output_fd data: msgLine:%d len:%d%s,%d\n", msgLine, (int)strlen(buf), buf);
+			strcat(tempBuf, buf);
+			tempBuf[255]='\0';
+			
+            //if (msgLine >= 5) {
+            //    break; // 限制读取的行数
+            //}
         }
     }
+	
+	if(msgLine > 1){
+				
+		//WS_ERR("msg: %s \n",tempBuf);
+		memcpy(buffer,tempBuf,MY_BUF_SIZE);
+	
+		WS_ERR("msgbuffer: %s \n",buffer);
+		KillProcessByName("cat");
+        pclose(fp);				
+		return 0;
+	}else{				
+		WS_ERR("Timeout occurred strCmd %s\n", strCmd);
+        KillProcessByName("cat");
+        pclose(fp);
+        return -1;
+	}
 
-    WS_ERR("KillProcessCat\n");
-    KillProcessCat();
 
-    pclose(fp);
-    return -1;
 }
+
+int getATOutput(const char *strCmd, char *buffer) 
+{
+	
+	int getCNT = 5;
+	while(getCNT--){
+		
+    	char buf[MY_BUF_SIZE] = {0};
+		ret = Get4GOutputBySaveFile(strCmd,buf);
+		if(!ret){
+			if (strstr(buf, buffer)) {
+				strcpy(buffer, buf);
+				WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
+				return 0;
+			} else if (strstr(buf, "OK")){
+				
+				WS_ERR("OK\n");
+			} else if (strstr(buf, "ERROR")){
+				
+				WS_ERR("ERROR\n");
+			}
+			
+			//return -1;
+
+		}else{
+			WS_ERR("cant get ATOutput, try again\n");	
+		}
+	}
+}
+
 
 int dail4G()
 {
 
     int dailCnt = 0;
     int autoDailCnt = 0;
-    char buffer[256]={0};
+    char buffer[MY_BUF_SIZE]={0};
 autodail:
 
-	memset(buffer,0,256);
+	memset(buffer,0,MY_BUF_SIZE);
 	strcpy(buffer, "+MDIALUPCFG: \"auto\",0");
 	ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",buffer);
 	if(ret == 0)
 	{	
 		WS_ERR("is not auto dail \n");
-		memset(buffer,0,256);
+		memset(buffer,0,MY_BUF_SIZE);
 		strcpy(buffer, "OK");
 		ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1' > /dev/ttyUSB2",buffer);
 		if(ret == 0)
@@ -2939,7 +3043,7 @@ autodail:
 	}
 dail:
 
-	memset(buffer,0,256);
+	memset(buffer,0,MY_BUF_SIZE);
 	strcpy(buffer, "MDIALUP");
 	ret = execute4GCmd("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
 	if(ret == -2){
@@ -2955,7 +3059,7 @@ dail:
 	}
 	WS_ERR("MDIALUP buffer is %s\n", buffer);
 	if (!hasIP(buffer)) {
-		memset(buffer,0,256);
+		memset(buffer,0,MY_BUF_SIZE);
 		strcpy(buffer, "OK");
 		ret = execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
 		if(ret == 0)
@@ -2977,7 +3081,7 @@ dail:
 	//memset(buffer,0,258);
 	//execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1\r\n' > /dev/ttyUSB2",buffer);
 	
-	memset(buffer,0,256);
+	memset(buffer,0,MY_BUF_SIZE);
 	strcpy(buffer, "MIPCALL");
 	ret = execute4GCmd("echo -e 'AT+MIPCALL?\r\n' > /dev/ttyUSB2",buffer);
 	if(ret == 0)
@@ -3009,7 +3113,13 @@ dail:
 				return -1;
 			}
 	}
-	system("udhcpc -i 4g0");
+	
+	KillProcessByName("udhcpc");
+	system("udhcpc -i 4g0");	
+	memset(buffer,0,MY_BUF_SIZE);
+	strcpy(buffer, "CCLK");
+	ret = getATOutput("echo -e 'AT+CCLK?\r\n' > /dev/ttyUSB2",buffer);
+
 	return 0;
 }
 
@@ -3065,7 +3175,35 @@ int check4GDail()
 	return 0;
 
 }
-
+int ensure4gConnection()
+{
+	while(1)
+	{
+		if(!is4G)
+		{
+		    ret = dail4G();
+		    WS_INFO("dail4G ret %d\n", ret);
+		    if (!ret) {
+		        is4G = true;
+		        WS_INFO("dail4G is4G %d\n", is4G);
+		    } else {
+		        is4G = false;
+		        WS_INFO("dail4G is4G %d\n", is4G);
+		    }
+		}
+		
+	    ret = check4GDail();
+	    if (!ret) {
+	        is4G = true;
+	        WS_INFO("check4GDail is4G %d\n", is4G);
+			return 0;
+	    } else {
+	        is4G = false;
+	        WS_INFO("check4GDail is4G %d\n", is4G);
+	    }
+		usleep(10000);
+    }
+}
 int au_server_init()
 {
 
@@ -3325,9 +3463,6 @@ void ws_buildCode1(char* package)
 
 }
 
-
-static bool isSg = 0;
-static bool is4G = 0;
 int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 {
     int ret = 0;
@@ -3335,16 +3470,18 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 
     WS_GET_SN(snStr);
 
-    ret = dail4G();
-    WS_INFO("dail4G ret %d\n", ret);
-
-    if (!ret) {
-        is4G = true;
-        WS_INFO("dail4G is4G %d\n", is4G);
-    } else {
-        is4G = false;
-        WS_INFO("dail4G is4G %d\n", is4G);
-    }
+	if(!is4G)
+	{
+	    ret = dail4G();
+	    WS_INFO("dail4G ret %d\n", ret);
+	    if (!ret) {
+	        is4G = true;
+	        WS_INFO("dail4G is4G %d\n", is4G);
+	    } else {
+	        is4G = false;
+	        WS_INFO("dail4G is4G %d\n", is4G);
+	    }
+	}
 
     if (is4G) {
         WS_INFO("!!!!ip %s !!\r\n", ip);
@@ -3400,12 +3537,12 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
             linkStatus(&is4G, &isSg);
         }	
 		
-		char httpHead[512] = {0};
-		memset(httpHead, 0, sizeof(httpHead));   
+		//char httpHead[512] = {0};
+		//memset(httpHead, 0, sizeof(httpHead));   
 		//创建协议包
-		ws_buildCode1(httpHead); //组装http请求头
+		//ws_buildCode1(httpHead); //组装http请求头
 
-		wssend(httpHead, strlen((const char*)httpHead));
+		//wssend(httpHead, strlen((const char*)httpHead));
 
         usleep(10000);
     }

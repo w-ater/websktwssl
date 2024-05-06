@@ -8,7 +8,10 @@ extern "C"
 typedef void (*Ondata)(char* data, int length);
 typedef void (*OnStatus)(int *is4gOk, int *isSgOk);
 
+int ensure4gConnection();
+
 int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus);
+int getATOutput(const char *strCmd, char *buffer);
 
 int get4GSerialOutput(const char *strCmd, char *buffer);
 
