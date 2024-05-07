@@ -14,6 +14,8 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus);
 int getATOutput(const char *strCmd, char *buffer);
 
 int get4GSerialOutput(const char *strCmd, char *buffer);
+void startHeartThread();
+void setHeartInterval(int newInterval);
 
 #ifdef __cplusplus
 }

@@ -168,6 +168,16 @@ int main(int argc,char *argv[])
 		ensure4gConnection();
 		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
 		wslConnect(snstr,handleData,GetStatus);
+		
+		//startHeartThread();
+
+	    // 模拟修改心跳间隔
+	    //sleep(10);
+	    //setHeartInterval(10);
+
+	    // 可以在这里执行其他操作
+
+	    //stopHeartThread();
         return 0;
 }
 
