@@ -97,7 +97,6 @@ SSL *myssl = NULL;
 SSL_CTX *ctx = NULL;
 
 int fd=-1,myfd=-1,pid;
-int ret;
 Ws_DataType retPkgType;
 pthread_mutex_t mutex;
 
@@ -1152,7 +1151,7 @@ static int32_t ws_enPackage(
  * 说明:
  *      建议recv时先接收14字节然后解包,根据返回缺失长度再recv一次,最后再解包,这样可有效避免连包时只解析到一包的问题
  ******************************************************************************/
- static int32_t ws_dePackage(
+ static int32_t ws_dePackage2(
     uint8_t* data,
     uint32_t len,
     Ws_DataType* retPkgType)
@@ -1195,7 +1194,7 @@ static int32_t ws_enPackage(
 	
 	return 0;
 }
-static int32_t ws_dePackage2(
+static int32_t ws_dePackage(
     uint8_t* data,
     uint32_t len,
     uint32_t* retDataLen,
@@ -1420,6 +1419,8 @@ int check_tcp_alive()
 
 int closewsl()
 {
+	
+	int ret;
 	nopong_cnt = 0;
     if (myssl != NULL) {
         WS_INFO("Fun:%s Close SSL\n", __FUNCTION__);
@@ -1427,7 +1428,7 @@ int closewsl()
         if (ret == WOLFSSL_SHUTDOWN_NOT_DONE)
 		{
 			WS_INFO("wolfSSL_shutdown again!!\r\n");
-            wolfSSL_shutdown(myssl);    /* bidirectional shutdown */
+            //wolfSSL_shutdown(myssl);    /* bidirectional shutdown */
 		}
 		wolfSSL_free(myssl); myssl = NULL;
     }
@@ -1461,6 +1462,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
     char shakeKey[128] = {0};
     char tempIp[128] = {0};
     char* p;
+	int ret;
 
     //服务器端网络地址结构体
     struct sockaddr_in report_addr;
@@ -1722,7 +1724,8 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
     char httpHead[512] = {0};
     char shakeKey[128] = {0};
     char tempIp[128] = {0};
-    char* p;
+    char* p;	
+	int ret;
 	
 	memset(path, 0, sizeof(path));
 	strcpy(path, "/server");
@@ -1993,13 +1996,9 @@ int32_t ws_requestQuServer(char* ip, int32_t port, char* path, int32_t timeoutMs
 		
 			}
         }
-        ws_delayms(1);
-        //超时检查
-        if (++timeoutCount > timeoutMs * 2)
-            break;
     }
     //连接失败,返回耗时(负值)
-	WS_ERR("xxxxx\n");
+	WS_ERR("xxxxxret%d\n",ret);
     close(fd);
     return -timeoutCount;
 }
@@ -2137,19 +2136,6 @@ int wssend2(char *buf,int data_len)
 
     return total_bytes_written;
 }
-int wssend(char *buf,int len)
-{
-	ret = ws_send(myssl, buf, len, true, WDT_TXTDATA);
-	//ret = wolfSSL_write(myssl, buf, len);
-	if (ret > 0) {
-	// 数据成功写入
-			WS_INFO("数据成功写入%d\n",ret);
-	} else {
-		// 发生错误
-			WS_INFO("发生错误%d\n",ret);
-	}
-	return ret;
-}
 
 /*******************************************************************************
  * 名称: ws_recv
@@ -2164,7 +2150,7 @@ int wssend(char *buf,int len)
  *      <0 非标准数据包数据的长度
  * 说明: 无
  ******************************************************************************/
-int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
+int32_t ws_recv2(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
 {
     int32_t ret;
     int32_t retRecv = 0;     //调用recv的返回
@@ -2184,6 +2170,8 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
     if (!buff || buffSize < 1)
     {
 		//while (recv(fd, tmp, sizeof(tmp), MSG_NOSIGNAL) > 0)
+		
+		WS_INFO("丢弃数据\r\n");
 		while (wolfSSL_read(myssl, tmp, sizeof(tmp)) > 0)
             ;
     }
@@ -2192,10 +2180,10 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
     {
 		//retRecv = recv(fd, buff, 14, MSG_NOSIGNAL);
 		retRecv = wolfSSL_read(myssl, buff, buffSize);		
-		ws_dePackage(buff,retRecv,&retPkgType);
+		ws_dePackage2(buff,retRecv,&retPkgType);
 		
-		WS_INFO("retRecv %d retPkgType %x\n",retRecv,retPkgType);
-		if(retRecv > 0)
+		WS_INFO("retRecv %d retPkgType %x buff %s\n",retRecv,retPkgType,buff);
+		if(retRecv > 2)
 		{
 
 			memset(buff,0,buffSize);
@@ -2233,15 +2221,14 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
 		}
     }
 	
-	WS_INFO("retRecv %d buff %s\n",retRecv,buff);
 	*retType = retPkgType;
 
    
     return retFinal;
 }
-#if 0
+#if 1
 
-int32_t ws_recv2(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
+int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
 {
     int32_t ret;
     int32_t retRecv = 0;     //调用recv的返回
@@ -2909,34 +2896,42 @@ int ensureGet4GOutput(const char *strCmd, char *buffer)
 
 int execute4GCmd(const char *strCmd, char *buffer) {
 	
-    char buf[MY_BUF_SIZE] = {0};
-	ret = get4GSerialOutput(strCmd,buf);
-	if(!ret){
-		if (strstr(buf, buffer)) {
-			strcpy(buffer, buf);
-			WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
-			return 0;
-		} else if (strstr(buf, "OK")) {
-			
-			WS_ERR("OK\n");
-		} else if (strstr(buf, "ERROR")) {
-			
-			WS_ERR("ERROR\n");
-		}
+	int ret;
+    //char buf[MY_BUF_SIZE] = {0};
+	int getCNT = 10;
+	while(getCNT--){
 		
-		return -1;
-
-	}else if (ret == -2){
-		WS_ERR("select failed or Timeout occurred try again\n");	
-		return -2;
+	    char buf[MY_BUF_SIZE] = {0};
+		ret = get4GSerialOutput(strCmd,buf);
+		if(!ret){
+			if (strstr(buf, buffer)) {
+				strcpy(buffer, buf);
+				WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
+				return 0;
+			} else if (strstr(buf, "OK")) {
+				
+				WS_ERR("OK\n");
+				ret =  -1;
+			} else if (strstr(buf, "ERROR")) {
+				
+				WS_ERR("ERROR\n");
+				ret =  -2;
+			}
+			
+		}else if (ret == -2){
+			WS_ERR("select failed or Timeout occurred try again\n");	
+			ret =  -2;
+		}
 	}
+	
+	return ret;
 }
 int Get4GOutputBySaveFile(const char *strCmd, char *buffer) 
 {
     char cmd[MY_BUF_SIZE];
     //sprintf(cmd, "%s && cat /dev/ttyUSB2", strCmd);
     
-    sprintf(cmd, "cat /dev/ttyUSB2 > ATOutput.txt &",strCmd);
+    //sprintf(cmd, "cat /dev/ttyUSB2 > ATOutput.txt &",strCmd);
     FILE *fp;
     char buf[MY_BUF_SIZE];
     char tempBuf[MY_BUF_SIZE] = "";
@@ -2988,12 +2983,15 @@ int Get4GOutputBySaveFile(const char *strCmd, char *buffer)
 int getATOutput(const char *strCmd, char *buffer) 
 {
 	
+	int ret;
 	int getCNT = 10;
 	while(getCNT--){
 		
     	char buf[MY_BUF_SIZE] = {0};
 		ret = Get4GOutputBySaveFile(strCmd,buf);
 		if(!ret){
+			
+			WS_ERR("strCmd %s \n buf %s\n buffer is %s\n", strCmd, buf,buffer);
 			if (strstr(buf, buffer)) {
 				strcpy(buffer, buf);
 				WS_ERR("strCmd %s buffer is %s\n", strCmd, buffer);
@@ -3018,34 +3016,37 @@ int getATOutput(const char *strCmd, char *buffer)
 
 int dail4G()
 {
-
+	int ret;
     int dailCnt = 0;
     int autoDailCnt = 0;
     char buffer[MY_BUF_SIZE]={0};
 autodail:
 
 	memset(buffer,0,MY_BUF_SIZE);
-	strcpy(buffer, "+MDIALUPCFG: \"auto\",0");
+	strcpy(buffer, "+MDIALUPCFG: \"auto\"");
 	ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",buffer);
 	if(ret == 0)
 	{	
-		WS_ERR("is not auto dail \n");
-		memset(buffer,0,MY_BUF_SIZE);
-		strcpy(buffer, "OK");
-		ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1' > /dev/ttyUSB2",buffer);
-		if(ret == 0)
-		{	
-			
-			WS_ERR("auto dail success \n");
-		}else{
-			WS_ERR("auto dail fail \n");
-			return -1;
+		if (strstr(buffer, "\"auto\",0")!= NULL)
+		{
+			WS_ERR("is not auto dail \n");
+			memset(buffer,0,MY_BUF_SIZE);
+			strcpy(buffer, "OK");
+			ret = execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1' > /dev/ttyUSB2",buffer);
+			if(ret == 0)
+			{	
+				
+				WS_ERR("auto dail success \n");
+			}else{
+				WS_ERR("auto dail fail \n");
+				return -1;
+			}
+		}else if(strstr(buffer, "\"auto\",1")!= NULL){
+			WS_ERR("is auto dail \n");
 		}
 		
-	}else if(ret == -1){
-			WS_ERR("is auto dail \n");
 	}else if(ret == -2){
-			WS_ERR("select failed or Timeout occurred try again,%d\n",autoDailCnt);			
+			WS_ERR("select failed or or error or Timeout,%d\n",autoDailCnt);			
 			if(autoDailCnt++ < 3){
 				goto autodail;
 			}else{
@@ -3117,7 +3118,7 @@ dail:
 			return -1;
 		}
 	}else if(ret == -2){
-			WS_ERR("select failed or Timeout occurred try again\n");			
+			WS_ERR("select failed or or error or Timeout\n");			
 			if(dailCnt++ < 3){
 				goto dail;
 			}else{
@@ -3130,15 +3131,37 @@ dail:
 	
 	KillProcessByName("udhcpc");
 	system("udhcpc -i 4g0");	
+
+	return 0;
+}
+int test4Gcmd()
+{
+	int ret;
+    int dailCnt = 0;
+    int autoDailCnt = 0;
+    char buffer[MY_BUF_SIZE]={0};
+	
+	KillProcessByName("udhcpc");
+	system("udhcpc -i 4g0");	
 	memset(buffer,0,MY_BUF_SIZE);
 	strcpy(buffer, "CCLK");
 	ret = getATOutput("echo -e 'AT+CCLK?\r\n' > /dev/ttyUSB2",buffer);
+
+	memset(buffer,0,MY_BUF_SIZE);
+	strcpy(buffer, "CESQ");
+	ret = getATOutput("echo -e 'AT+CESQ\r\n' > /dev/ttyUSB2",buffer);
+
+	memset(buffer,0,MY_BUF_SIZE);
+	strcpy(buffer, "CESQ");
+	ret = execute4GCmd("echo -e 'AT+CESQ\r\n' > /dev/ttyUSB2",buffer);
 
 	return 0;
 }
 
 int check4GDail()
 {
+	
+	int ret;
     FILE *fp;
     char buffer[258];
 
@@ -3208,6 +3231,7 @@ int check4GDail()
 }
 int linkCmdServer(char* ip, int32_t port, char* path)
 {
+	int ret;
 
 	WS_INFO("client wss://%s:%d%s pid/%d\r\n", ip, get_port, path, pid);
     if ((ret = ws_requestServer(ip, get_port, path, 3000)) <= 0)
@@ -3219,25 +3243,13 @@ int linkCmdServer(char* ip, int32_t port, char* path)
 		WS_INFO("connect success !!\r\n");
     }
 	au_server();
-	
-	int au = 0;
-	char* p;
-	char delims[] = ":";
-	char *result;
 
 	int recvCount = 3; // 设置最大重试次数
 	while(recvCount-- > 0)
 	{
 		//接收数据
 
-		ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);
-
-		//ret = wolfSSL_read(myssl, recv_buff, sizeof(recv_buff));
-
-		//正常包
-		//recv_len = sizeof(recv_buff);
-		//WS_INFO(" recv_len%d ret%d\r\n",recv_len,ret);
-		
+		ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);		
 		if (ret > 0)
 		{
 			WS_INFO("111client(%d): recv len/%d %s\r\n", pid, ret, recv_buff);
@@ -3247,25 +3259,16 @@ int linkCmdServer(char* ip, int32_t port, char* path)
 				WS_INFO("111au success \r\n");
 				return 0;
 
-            }else if (strstr(recv_buff, "\"msg\":\"OK\"") != NULL)
-            {
-				WS_INFO("222au success\r\n");
-				return 0;
-			}else if(strstr(recv_buff, "HTTP/1.1 403 Forbidden") != NULL){
+            }else if(strstr(recv_buff, "\"code\":403") != NULL){
 				WS_ERR("au fail \r\n");
 				return -1;
 
-			}else if (retPkgType == WDT_DISCONN){
-	            WS_INFO("client(%d): recv WDT_DISCONN \r\n", pid);
-	            break;
-	        }
-	        else if (retPkgType == WDT_PING)
-	            WS_INFO("client(%d): recv WDT_PING \r\n", pid);
-	        else if (retPkgType == WDT_PONG)
-	            WS_INFO("client(%d): recv WDT_PONG \r\n", pid);
+			}else				
+				WS_INFO("recv > 0 unknown !!\r\n");			
+				return -1;
 
 		}else if(ret < 0){
-			WS_INFO("recv <= 0 !!\r\n");
+			WS_INFO("recv <= 0 linkCmdServer fail!!\r\n");
 			//recvCount--;
 		}
 		ws_delayms(10);
@@ -3284,9 +3287,9 @@ int linkWebServer()
 	memset(path, 0, sizeof(path));
 	char pathDemo[] = "/device?sn=%s&type=0";
 	sprintf(path, pathDemo, SN);
-	//strcpy(ip, "iot.daguiot.com");
+	strcpy(ip, "iot.daguiot.com");
 	
-	strcpy(ip, "rtc.daguiot.com");
+	//strcpy(ip, "rtc.daguiot.com");
 	get_port = 7758;
 
 #else
@@ -3364,27 +3367,85 @@ int netlink_check()
 
 }
 
+typedef struct
+{
+	char *buf;
+	int len;
+
+}sendData_Struct;
+
+int wssend(char *buf,int len)
+{
+	memset(send_buff, 0,sizeof(send_buff));
+	memcpy(send_buff,buf,len);
+	
+	//WS_INFO("!!!!!send_buff%s send_buff %d\n", send_buff,sizeof(send_buff));
+	/*ret = ws_send(myssl, buf, len, true, WDT_TXTDATA);
+	//ret = wolfSSL_write(myssl, buf, len);
+	if (ret > 0) {
+	// 数据成功写入
+			WS_INFO("数据成功写入%d\n",ret);
+	} else {
+		// 发生错误
+			WS_INFO("发生错误%d\n",ret);
+	}
+	return ret;*/
+}
 
 // 发送心跳的函数
-void* sendHeart(void* arg) 
+void* sendJsonHeart(void* arg) 
 {
+	int ret;
+	char* jsonData;
+	int32_t jsonDataLen;
+	jsonData = (char*)arg;
+	
     while (gHeartThreadExit == FALSE) {
-        if (nopong_cnt > 1) {
-            WS_INFO("client: not recv WDT_PONG %d\n", nopong_cnt);
+        if (nopong_cnt > 2 && g_isSg) {
+            WS_INFO("!!!!!client: not recv WDT_PONG %d\n******disconnect server******\n", nopong_cnt);
             nopong_cnt = 0;
-			if(++g_hbdiscnt == 1){
-				linkCmdServer(ip, get_port, path);
+			g_isSg =  0;
+#ifdef FIREALARM
+			WS_INFO("FIREALARM version\r\n");
+			memset(path, 0, sizeof(path));
+			char pathDemo[] = "/device?sn=%s&type=0";
+			sprintf(path, pathDemo, SN);
+			//strcpy(ip, "iot.daguiot.com");
+			
+			strcpy(ip, "rtc.daguiot.com");
+			get_port = 7758;			
+			ret = linkCmdServer(ip, get_port, path);
+		
+#else
+			ret = linkCmdServer(ip, get_port, path);		
+#endif
+			if(!ret){
+				g_isSg = 1;
+				continue;
+			}else{
+				
+				g_is4GDail = 0;
+				g_isSg =  0;
+				gHeartThreadExit = TRUE;
+				gHeartThread = 0;
+			}
+			/*if(++g_hbdiscnt == 1){
+				ret = linkCmdServer(ip, get_port, path);
+				if(!ret){					
+					g_hbdiscnt = 0;
+					continue;
+				}else{
+
+				}
 			}
 			if(++g_hbdiscnt == 2){
 				g_hbdiscnt = 0;
 				g_isSg =  0;
-			}
-            // 可以在这里执行其他异常处理逻辑
-            gHeartThreadExit = TRUE;
+			}*/
         }
 
         heart += 1;
-        if (heart > interval) {
+        if (heart > interval * 10) {
             heart = 0;
 
             // 发送心跳
@@ -3394,7 +3455,7 @@ void* sendHeart(void* arg)
 			//send返回异常, 连接已断开
 			if (ret <= 0)
 			{
-				WS_INFO("client(%d): send failed %d, disconnect now ...\r\n", pid, ret);
+				WS_INFO("!!!!!client(%d): send failed %d, disconnect now ...\r\n", pid, ret);
 				gHeartThreadExit = TRUE;
 			}else{
 				nopong_cnt++;
@@ -3402,10 +3463,28 @@ void* sendHeart(void* arg)
 			}
 
         }
-
-        sleep(1); // 每次心跳间隔为秒
+		jsonDataLen = strlen(jsonData);
+	    if (jsonDataLen > 0) {
+            // 传入的参数即为额外数据
+            //jsonData = (char*)arg;
+            //jsonDataLen = strlen(jsonData);
+			ret = ws_send(myssl, jsonData, jsonDataLen, true, WDT_TXTDATA);
+            if (ret <= 0) {
+                WS_INFO("client: send failed with json data, disconnecting now...\n");
+                gHeartThreadExit = TRUE;
+			
+				memset(send_buff, 0,sizeof(send_buff));
+            } else {
+                WS_INFO("client:send json success Data%s,jsonDataLen%d\n",jsonData,jsonDataLen);
+				
+				memset(send_buff, 0,sizeof(send_buff));
+            }
+        }
+        //sleep(1); // 每次心跳间隔为秒
+        
+		usleep(100000);
     }
-    WS_INFO("sendHeart exit\n");
+    WS_INFO("sendJsonHeart exit\n");
     pthread_exit(NULL);
 
     //return NULL;
@@ -3425,7 +3504,7 @@ void startHeartThread(void)
         return 0;
     }
 
-    pthread_create(&gHeartThread, NULL, sendHeart, NULL);
+    pthread_create(&gHeartThread, NULL, sendJsonHeart, send_buff);
     if (0 == ret)
         pthread_setname_np(gHeartThread, "sendHeart");
     else
@@ -3469,9 +3548,10 @@ int getTimeFromJSON(const char* json_data) {
     return time_value;
 }
 
-int setrecdataca11(handleData callback)
+int recvDataCa11(handleData callback)
 {
-
+	
+	int ret;
 	memset(recv_buff, 0, sizeof(recv_buff));
 	retPkgType = 0;
 	//ret = wolfSSL_read(myssl, recv_buff, recv_buff);
@@ -3537,16 +3617,10 @@ int setrecdataca11(handleData callback)
 }
 
 
-void ws_buildCode1(char* package)
-{
-    const char CheckToken[] = "{\"code\":1,\"message\":\"deviceinfo\",\"data\":{\"iccid\":\"\",\"link\":0,\"use\":0,\"sn\":\"6902200010110823\",\"hv\":\"TX5112CV300\",\"sv\":\"v1.0.0.1\"}}";
-
-    sprintf(package, CheckToken);
-	WS_INFO("package %s\n",package);
-
-}
 int ensure4gConnection()
 {
+	
+	int ret;
 	while(1)
 	{
 		if(!g_is4G)
@@ -3572,26 +3646,29 @@ int ensure4gConnection()
 		        WS_INFO("check4GDail g_is4GDail %d\n", g_is4GDail);
 		    }
 		}
-		usleep(10000);
+		if(!g_is4GDail)
+		{			
+			WS_INFO("check4GDail,wait \n");
+			sleep(5);
+		}
+		usleep(100000);
     }
 }
 
 void* link4G(void* arg) 
 {
+    int ret;
     while (gLink4gThreadExit == FALSE) {
-		if(!g_is4G)
-		{
-			ensure4gConnection();
-
-		}
-		
-		usleep(10000);
-
+        //if (!g_is4G && !g_is4GDail) {
+            ret = ensure4gConnection();
+            if (ret == 0) {
+                //break;
+            }
+        //}
+        usleep(100000);
     }
     WS_INFO("link4G exit\n");
     pthread_exit(NULL);
-
-    //return NULL;
 }
 
 // 启动心跳线程
@@ -3621,6 +3698,7 @@ void startLink4G(void)
 
 void* connectWebServer(void* arg) 
 {
+	int ret;
     while (gWebsocketThreadExit == FALSE) {
 		
 		if (g_is4G && g_is4GDail && !g_isSg) {
@@ -3633,7 +3711,11 @@ void* connectWebServer(void* arg)
 				//continue;
 			}
 		}
-
+		if(!g_isSg)
+		{			
+			WS_INFO("connecting WebServer,wait \n");
+			sleep(5);
+		}
 		
 		usleep(10000);
     }
@@ -3667,6 +3749,15 @@ void startWebServer(void)
 
     return ret;
 }
+void ws_buildCode1(char* package)
+{
+    const char CheckToken[] = "{\"code\":1,\"message\":\"deviceinfo\",\"data\":{\"iccid\":\"\",\"link\":0,\"use\":0,\"sn\":\"6902200010110823\",\"hv\":\"TX5112CV300\",\"sv\":\"v1.0.0.1\"}}";
+
+    sprintf(package, CheckToken);
+	printf("package %s\n",package);
+
+}
+
 int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 {
     int ret = 0;
@@ -3686,131 +3777,39 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 				
 				startWebServer();
 			}
+			
 	        if (0 == gHeartThread && g_isSg)
 	    	{
 				
 				startHeartThread();
 			}
 			if(g_isSg){
-	        ret = setrecdataca11(handleJson);
-			if(ret < 0){				
-				closewsl();
-				g_is4GDail = 0;
-	            g_isSg = 0;
-				WS_INFO("OnStatus g_is4G %d g_isSg %d\n", g_is4G, g_isSg);
-	            linkStatus(&g_is4G, &g_isSg);
+	        ret = recvDataCa11(handleJson);
+				if(ret < 0){				
+					closewsl();
+					g_is4GDail = 0;
+		            g_isSg = 0;
+					gHeartThread = 0;
+						
+					WS_INFO("OnStatus g_is4G %d g_is4GDail%d g_isSg %d\n", g_is4G, g_is4GDail, g_isSg);
+		            linkStatus(&g_is4G, &g_isSg);
 
-	        }else if (ret > 0) {
-	            g_isSg = 1;
-	            linkStatus(&g_is4G, &g_isSg);
-	        }else{
-	            WS_INFO("No receive data !!\r\n");
-	            g_isSg = 1;
-	            linkStatus(&g_is4G, &g_isSg);
-	        }	
-				}
-			//char httpHead[512] = {0};
-			//memset(httpHead, 0, sizeof(httpHead));   
-			//创建协议包
-			//ws_buildCode1(httpHead); //组装http请求头
+		        }else if (ret > 0) {
+		            g_isSg = 1;
+		            linkStatus(&g_is4G, &g_isSg);
+		        }else{
+		            WS_INFO("No receive data !!\r\n");
+		            g_isSg = 1;
+		            linkStatus(&g_is4G, &g_isSg);
+					
+				/*char httpHead[512] = {0};
+				memset(httpHead, 0, sizeof(httpHead));   
+				//创建协议包
+				ws_buildCode1(httpHead); //组装http请求头
 
-			//wssend(httpHead, strlen((const char*)httpHead));
-
-	        usleep(10000);
-		}
-    }
-
-    WS_INFO("connect exit !!\r\n");
-
-    return 0;
-}
-
-int wslConnect2(char *snStr, Ondata handleJson, OnStatus linkStatus)
-{
-    int ret = 0;
-    int hbSel = 1;
-
-    WS_GET_SN(snStr);
-
-	if(!g_is4G)
-	{
-	    ret = dail4G();
-	    WS_INFO("dail4G ret %d\n", ret);
-	    if (!ret) {
-	        g_is4G = true;
-	        WS_INFO("dail4G g_is4G %d\n", g_is4G);
-	    } else {
-	        g_is4G = false;
-	        WS_INFO("dail4G g_is4G %d\n", g_is4G);
-	    }
-	}
-
-    if (g_is4G) {
-        WS_INFO("!!!!ip %s !!\r\n", ip);
-        ret = linkWebServer();
-        if (ret < 0) {
-            WS_INFO("au fail\n");
-            // return -1;
-        }
-    }
-
-    while (1) {
-		while(0 == gWslConnectExit){
-	        //ret = sendHeart(hbSel);
-	        if (0 == gHeartThread)
-	    	{
-				
-				startHeartThread();
+				wssend(httpHead, strlen((const char*)httpHead));*/
+		        	}	
 			}
-	        ret = setrecdataca11(handleJson);
-			if(ret < 0){
-				g_is4G = 0;
-	            g_isSg = 0;
-			
-				WS_INFO("OnStatus g_is4G %d g_isSg %d\n", g_is4G, g_isSg);
-	            linkStatus(&g_is4G, &g_isSg);
-	            closewsl();
-
-	            if (!g_is4G) {
-	                ret = dail4G();
-	                if (!ret) {
-	                    g_is4G = true;
-	                } else {
-	                    g_is4G = false;
-	                }
-	            }
-
-	            ret = check4GDail();
-	            if (!ret) {
-	                g_is4G = true;
-	                WS_INFO("dail4G g_is4G %d\n", g_is4G);
-	            } else {
-	                g_is4G = false;
-	                WS_INFO("dail4G g_is4G %d\n", g_is4G);
-	            }
-
-	            if (g_is4G) {
-	                ret = linkWebServer();
-	                if (ret < 0) {
-	                    g_isSg = false;
-	                    continue;
-	                }
-	            }
-	        }	else if (ret > 0) {
-	            g_isSg = 1;
-	            linkStatus(&g_is4G, &g_isSg);
-	        } else{
-	            WS_INFO("No receive data !!\r\n");
-	            g_isSg = 1;
-	            linkStatus(&g_is4G, &g_isSg);
-	        }	
-			
-			//char httpHead[512] = {0};
-			//memset(httpHead, 0, sizeof(httpHead));   
-			//创建协议包
-			//ws_buildCode1(httpHead); //组装http请求头
-
-			//wssend(httpHead, strlen((const char*)httpHead));
 
 	        usleep(10000);
 		}
@@ -3820,6 +3819,7 @@ int wslConnect2(char *snStr, Ondata handleJson, OnStatus linkStatus)
 
     return 0;
 }
+
 #if 0
 int wslConnect2(char *snStr, Ondata handleJson, OnStatus linkStatus)
 {

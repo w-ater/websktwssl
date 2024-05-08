@@ -165,10 +165,12 @@ int main(int argc,char *argv[])
 		
 		//ret = get4GSerialOutput("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",send_buff2);
 		//return 0;
+		//test4Gcmd();
+		//return 0;
 		ensure4gConnection();
 		char *snstr = "6902200010110883";//6902200010111237 6902200010110883
 		wslConnect(snstr,handleData,GetStatus);
-		
+
 		//startHeartThread();
 
 	    // 模拟修改心跳间隔
