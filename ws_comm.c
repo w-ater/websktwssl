@@ -43,6 +43,8 @@
 #include <openssl/bio.h>
 #include <openssl/evp.h>
 #include "./wolfssl/openssl/ssl.h"  //wolfssl转openssl的兼容层
+#include "./wolfssl/ssl.h" 
+
 #include "wsl.h"
 
 
@@ -50,7 +52,7 @@
 #define SEND_PKG_MAX (1024 * 10)
 
 //收包缓冲区大小 10K+
-#define RECV_PKG_MAX (SEND_PKG_MAX + 16)
+#define RECV_PKG_MAX (SEND_PKG_MAX + 2)
 //#define SERVER_IP "192.168.100.111"
 //#define SERVER_IP "192.168.1.102"
 //#define SERVER_IP "192.168.100.1"
@@ -84,6 +86,15 @@
 #define WS_INFO(...)
 #define WS_ERR(...) 
 #elif(LOG_LEVEL == INFO_LEVEL)
+/*#define WS_INFO(...) do { \
+    time_t now = time(NULL); \
+    struct tm *t = localtime(&now); \
+    char timestamp[20]; \
+    strftime(timestamp, 20, "%Y-%m-%d %H:%M:%S", t); \
+    fprintf(stdout, "[WS_INFO] %s(%d) [%s]: ", timestamp, __LINE__, __FUNCTION__); \
+    fprintf(stdout, __VA_ARGS__); \
+} while(0)*/
+
 #define WS_INFO(...) fprintf(stdout, "[WS_INFO] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stdout, __VA_ARGS__)
 #define WS_ERR(...) fprintf(stderr, "[WS_ERR] %s(%d): ", __FUNCTION__, __LINE__),fprintf(stderr, __VA_ARGS__)
 #elif(LOG_LEVEL == ERR_LEVEL)
@@ -91,6 +102,32 @@
 #endif
 
 #define MY_BUF_SIZE 256
+#include <stdarg.h>
+#include <stdio.h>
+#include <sys/time.h>
+#include <time.h>
+
+
+
+
+void myprint(const char *format, ...) {
+    struct timeval tv;
+
+    // 获取当前时间
+    gettimeofday(&tv, NULL);
+
+    time_t now = tv.tv_sec;
+    struct tm *t = localtime(&now);
+    char strTime[1000] = {0};
+    snprintf(strTime, 999, "[%4d-%02d-%02d %02d:%02d:%02d:%03ld] %s(%d) %s\n", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec, tv.tv_usec / 1000, __FUNCTION__, __LINE__, format);
+
+    va_list args; // 定义一个 va_list 类型的变量
+    va_start(args, format); // 初始化 va_list 变量
+
+    vprintf(strTime, args); // 使用 vprintf 函数打印可变数量的参数
+
+    va_end(args); // 清理 va_list 变量
+}
 
 
 SSL *myssl = NULL;
@@ -121,6 +158,7 @@ static int g_hbdiscnt = 0;
 static bool g_isSg = 0;
 static bool g_is4G = 0;
 static bool g_is4GDail = 0;
+static bool g_fb4GDail = 0;
 
 int interval = 5; // 默认心跳间隔
 
@@ -1420,6 +1458,7 @@ int check_tcp_alive()
 int closewsl()
 {
 	
+	WS_INFO("Fun:%s closewsl\n", __FUNCTION__);
 	int ret;
 	nopong_cnt = 0;
     if (myssl != NULL) {
@@ -1506,7 +1545,7 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 	setsockopt(myfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
 
 	struct timeval timeout;
-	timeout.tv_sec = 5;
+	timeout.tv_sec = 10;
 	timeout.tv_usec = 0;
 
 	if (setsockopt(myfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
@@ -1537,7 +1576,10 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
         }
 		ws_delayms(1);
     }
-	
+	    //非阻塞
+    //ret = fcntl(fd, F_GETFL, 0);
+    //fcntl(fd, F_SETFL, ret | O_NONBLOCK);
+    
 	//SSL_library_init();
     //SSL_load_error_strings();
     wolfSSL_Init();
@@ -1557,6 +1599,10 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
     }
 
     SSL_set_fd(myssl, myfd);
+	//SSL_set_mode(myssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
+	//SSL_set_mode(myssl, SSL_MODE_AUTO_RETRY);
+
+	
     int ssl_ret;
     int fgCycleFlag = 1;
     while(fgCycleFlag )
@@ -1584,10 +1630,6 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
     }
 	
 	/* 基于 ctx 产生一个新的 SSL */
-	
-    //非阻塞
-    //ret = fcntl(fd, F_GETFL, 0);
-    //fcntl(fd, F_SETFL, ret | O_NONBLOCK);
 
     //发送http协议头
     memset(shakeKey, 0, sizeof(shakeKey));
@@ -2252,12 +2294,13 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
     //先接收数据头部,头部最大2+4+8=14字节
     else
     {
-        if (buffSize < 16){
-            WS_INFO("error, buffSize must be >= 16 \r\n");
+        if (buffSize < 2){
+            WS_INFO("error, buffSize must be >= 2 \r\n");
         	}
         else{
             //retRecv = recv(fd, buff, 14, MSG_NOSIGNAL);
-			retRecv = wolfSSL_read(myssl, buff, 14);
+			retRecv = wolfSSL_read(myssl, buff, MY_BUF_SIZE);
+			
 			//char recv_buff[128];
 			//memcpy();
         	}
@@ -2324,21 +2367,6 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
                         retDePkg += ret;
                     }
                 }
-                //for (timeout = 0; timeout < 200 && retDePkg < 0;)
-				/*for (timeout = 0; timeout < 100 && retDePkg < 0;)
-                {
-                    //ws_delayus(100);
-                    timeout += 50;
-                    //ret = recv(fd, &cBuff[retRecv], -retDePkg, MSG_NOSIGNAL);
-					ret = wolfSSL_read(myssl, &cBuff[retRecv], -retDePkg);
-
-                    if (ret > 0)
-                    {
-                        timeout = 0;
-                        retRecv += ret;
-                        retDePkg += ret;
-                    }*/
-                //}
 #ifdef WS_DEBUG
                 //显示数据
                 WS_INFO("ws_recv2: len/%d retDePkg/%d retDataLen/%d retHeadLen/%d retPkgType/%d\r\n",
@@ -2350,9 +2378,9 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
             }
 #ifdef WS_DEBUG
             //显示数据
-            //WS_INFO("ws_recv3: len/%d retDePkg/%d retDataLen/%d retHeadLen/%d retPkgType/%d\r\n",
-                  //  retRecv, retDePkg, retDataLen, retHeadLen, retPkgType);
-            //WS_HEX(stdout, buff, retRecv);
+            WS_INFO("ws_recv3: len/%d retDePkg/%d retDataLen/%d retHeadLen/%d retPkgType/%d\r\n",
+                    retRecv, retDePkg, retDataLen, retHeadLen, retPkgType);
+            WS_HEX(stdout, buff, retRecv);
 #endif
             //一包数据终于完整的接收完了...
             if (retDePkg > 0)
@@ -2387,7 +2415,7 @@ int32_t ws_recv(SSL *myssl, void* buff, int32_t buffSize, Ws_DataType* retType)
         }
     }else{
     	
-		//WS_INFO("retRecv %d\r\n",retRecv);
+		WS_INFO("retRecv %d\r\n",retRecv);
 		return retRecv;
 	}
     //返回包类型
@@ -3367,13 +3395,6 @@ int netlink_check()
 
 }
 
-typedef struct
-{
-	char *buf;
-	int len;
-
-}sendData_Struct;
-
 int wssend(char *buf,int len)
 {
 	memset(send_buff, 0,sizeof(send_buff));
@@ -3393,7 +3414,7 @@ int wssend(char *buf,int len)
 }
 
 // 发送心跳的函数
-void* sendJsonHeart(void* arg) 
+void* sendJsonorHeart(void* arg) 
 {
 	int ret;
 	char* jsonData;
@@ -3402,9 +3423,13 @@ void* sendJsonHeart(void* arg)
 	
     while (gHeartThreadExit == FALSE) {
         if (nopong_cnt > 2 && g_isSg) {
-            WS_INFO("!!!!!client: not recv WDT_PONG %d\n******disconnect server******\n", nopong_cnt);
+            WS_INFO("!!!!!client: not recv WDT_PONG %d\n", nopong_cnt);		
+			WS_INFO("!!!!!******disconnect server******\n");
             nopong_cnt = 0;
 			g_isSg =  0;
+			g_is4GDail = 0;
+			g_fb4GDail = 1;
+			closewsl();
 #ifdef FIREALARM
 			WS_INFO("FIREALARM version\r\n");
 			memset(path, 0, sizeof(path));
@@ -3412,7 +3437,7 @@ void* sendJsonHeart(void* arg)
 			sprintf(path, pathDemo, SN);
 			//strcpy(ip, "iot.daguiot.com");
 			
-			strcpy(ip, "rtc.daguiot.com");
+			strcpy(ip, "iot.daguiot.com");
 			get_port = 7758;			
 			ret = linkCmdServer(ip, get_port, path);
 		
@@ -3421,11 +3446,12 @@ void* sendJsonHeart(void* arg)
 #endif
 			if(!ret){
 				g_isSg = 1;
+				g_is4GDail = 1;
+				g_fb4GDail = 0;
 				continue;
 			}else{
 				
 				g_is4GDail = 0;
-				g_isSg =  0;
 				gHeartThreadExit = TRUE;
 				gHeartThread = 0;
 			}
@@ -3504,7 +3530,7 @@ void startHeartThread(void)
         return 0;
     }
 
-    pthread_create(&gHeartThread, NULL, sendJsonHeart, send_buff);
+    pthread_create(&gHeartThread, NULL, sendJsonorHeart, send_buff);
     if (0 == ret)
         pthread_setname_np(gHeartThread, "sendHeart");
     else
@@ -3548,7 +3574,7 @@ int getTimeFromJSON(const char* json_data) {
     return time_value;
 }
 
-int recvDataCa11(handleData callback)
+int recvDataCall(handleData callback)
 {
 	
 	int ret;
@@ -3635,7 +3661,7 @@ int ensure4gConnection()
 		        WS_INFO("dail4G g_is4G %d\n", g_is4G);
 		    }
 		}
-		if(!g_is4GDail){
+		if(!g_is4GDail && !g_fb4GDail){
 		    ret = check4GDail();
 		    if (!ret) {
 		        g_is4GDail = true;
@@ -3665,6 +3691,8 @@ void* link4G(void* arg)
                 //break;
             }
         //}
+        
+		WS_ERR("link4G thread ing\n");
         usleep(100000);
     }
     WS_INFO("link4G exit\n");
@@ -3702,6 +3730,8 @@ void* connectWebServer(void* arg)
     while (gWebsocketThreadExit == FALSE) {
 		
 		if (g_is4G && g_is4GDail && !g_isSg) {
+			
+			WS_INFO("linking WebServer \n");
 			ret = linkWebServer();
 			if (ret < 0) {
 				g_isSg = false;
@@ -3784,13 +3814,15 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 				startHeartThread();
 			}
 			if(g_isSg){
-	        ret = recvDataCa11(handleJson);
-				if(ret < 0){				
-					closewsl();
-					g_is4GDail = 0;
-		            g_isSg = 0;
-					gHeartThread = 0;
-						
+	        ret = recvDataCall(handleJson);
+				if(ret < 0){
+					if(g_isSg){
+						closewsl();
+						g_is4GDail = 0;
+			            g_isSg = 0;
+						gHeartThread = 0;
+					}
+					
 					WS_INFO("OnStatus g_is4G %d g_is4GDail%d g_isSg %d\n", g_is4G, g_is4GDail, g_isSg);
 		            linkStatus(&g_is4G, &g_isSg);
 
@@ -3799,7 +3831,7 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 		            linkStatus(&g_is4G, &g_isSg);
 		        }else{
 		            WS_INFO("No receive data !!\r\n");
-		            g_isSg = 1;
+		            //g_isSg = 1;
 		            linkStatus(&g_is4G, &g_isSg);
 					
 				/*char httpHead[512] = {0};
@@ -3810,6 +3842,7 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 				wssend(httpHead, strlen((const char*)httpHead));*/
 		        	}	
 			}
+			//WS_INFO("!!!!!!!\r\n");
 
 	        usleep(10000);
 		}
