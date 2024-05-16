@@ -2735,7 +2735,7 @@ int KillProcessByName(char *processName)
     // 逐行读取进程ID并杀死进程
     while (fgets(buf, sizeof(buf), fp) != NULL) {
 		
-		WS_ERR(" processName %s pid: %s\n",processName, buf);
+		//WS_ERR(" processName %s pid: %s\n",processName, buf);
         int pid = atoi(buf);
         if (pid > 0) {
             //WS_INFO("Killing process with PID: %d\n", pid);
@@ -2921,16 +2921,16 @@ int ensureGet4GOutput(const char *strCmd, char *buffer)
     }
 
 }
-
 int execute4GCmd(const char *strCmd, char *buffer) {
 	
 	int ret;
     //char buf[MY_BUF_SIZE] = {0};
-	int getCNT = 10;
+	int getCNT = 5;
 	while(getCNT--){
 		
 	    char buf[MY_BUF_SIZE] = {0};
-		ret = get4GSerialOutput(strCmd,buf);
+		//ret = get4GSerialOutput(strCmd,buf);
+		ret = Get4GOutputBySaveFile(strCmd,buf);
 		if(!ret){
 			if (strstr(buf, buffer)) {
 				strcpy(buffer, buf);
@@ -2939,11 +2939,11 @@ int execute4GCmd(const char *strCmd, char *buffer) {
 			} else if (strstr(buf, "OK")) {
 				
 				WS_ERR("OK\n");
-				ret =  -1;
+				ret =  0;
 			} else if (strstr(buf, "ERROR")) {
 				
 				WS_ERR("ERROR\n");
-				ret =  -2;
+				ret =  -1;
 			}
 			
 		}else if (ret == -2){
@@ -2954,6 +2954,7 @@ int execute4GCmd(const char *strCmd, char *buffer) {
 	
 	return ret;
 }
+
 int Get4GOutputBySaveFile(const char *strCmd, char *buffer) 
 {
     char cmd[MY_BUF_SIZE];
@@ -2967,26 +2968,36 @@ int Get4GOutputBySaveFile(const char *strCmd, char *buffer)
 
 
 	
-	system("cat /dev/ttyUSB2 > ATOutput.txt &");
+	system("cat /dev/ttyUSB2 > /tmp/ATOutput.txt &");
 	system(strCmd);
+	
+	KillProcessByName("cat");
+	
+	usleep(100*1000);
 	WS_ERR("strCmd %s success\n", strCmd);
 	
-	fp = fopen("ATOutput.txt" , "r");
+	fp = fopen("/tmp/ATOutput.txt" , "r");
 	if(fp == NULL) {
 	   perror("打开文件时发生错误");
 	   return(-1);
 	}
-    while (fgets(buf, sizeof(buf), fp) != NULL) {
-        if (strlen(buf) > 1) {
-            msgLine++;
-            WS_INFO("output_fd data: msgLine:%d len:%d%s,%d\n", msgLine, (int)strlen(buf), buf);
-			strcat(tempBuf, buf);
-			tempBuf[255]='\0';
-			
-            //if (msgLine >= 5) {
-            //    break; // 限制读取的行数
-            //}
-        }
+	int i=3;
+	fseek(fp, 0, SEEK_SET); // 将文件指针重新定位到文件开头
+    while (i--) {
+		if (fgets(buf, sizeof(buf), fp) != NULL) {
+	            msgLine++;
+	            WS_INFO("output_fd data: msgLine:%d len:%d%s,%d\n", msgLine, (int)strlen(buf), buf);
+				strcat(tempBuf, buf);
+				tempBuf[255]='\0';
+				
+	            //if (msgLine >= 5) {
+	            //    break; // 限制读取的行数
+	            //}
+		}else{
+				fseek(fp, 0, SEEK_SET);
+				WS_ERR("fgets null\n");
+
+		}
     }
 	
 	if(msgLine > 1){
@@ -2995,13 +3006,13 @@ int Get4GOutputBySaveFile(const char *strCmd, char *buffer)
 		memcpy(buffer,tempBuf,MY_BUF_SIZE);
 	
 		WS_ERR("msgbuffer: %s \n",buffer);
-		KillProcessByName("cat");
-        pclose(fp);				
+		//KillProcessByName("cat");
+        fclose(fp);				
 		return 0;
 	}else{				
-		WS_ERR("Timeout occurred strCmd %s\n", strCmd);
-        KillProcessByName("cat");
-        pclose(fp);
+		WS_ERR("fgets err strCmd %s\n", strCmd);
+        //KillProcessByName("cat");
+        fclose(fp);
         return -1;
 	}
 
@@ -3039,10 +3050,100 @@ int getATOutput(const char *strCmd, char *buffer)
 		}
 	}
 	WS_ERR("cant get ATOutput, please try again\n");
+	return -1;
 }
 
-
 int dail4G()
+{
+	int ret;
+    int dailCnt = 0;
+    int autoDailCnt = 0;
+    char buffer[MY_BUF_SIZE]={0};
+
+	memset(buffer,0,MY_BUF_SIZE);
+	strcpy(buffer, "+MDIALUPCFG: \"auto\"");
+	ret = getATOutput("echo -e 'AT+MDIALUPCFG=\"auto\"' > /dev/ttyUSB2",buffer);
+	if(ret == 0)
+	{	
+		if (strstr(buffer, "\"auto\",0")!= NULL)
+		{
+			WS_ERR("is not auto dail \n");
+			memset(buffer,0,MY_BUF_SIZE);
+			strcpy(buffer, "OK");
+			ret = getATOutput("echo -e 'AT+MDIALUPCFG=\"auto\",1' > /dev/ttyUSB2",buffer);
+			if(ret == 0)
+			{	
+				
+				WS_ERR("auto dail success \n");
+			}else{
+				WS_ERR("auto dail fail \n");
+				return -1;
+			}
+		}else if(strstr(buffer, "\"auto\",1")!= NULL){
+			WS_ERR("is auto dail \n");
+		}
+		
+	}else if(ret == -1){
+			WS_ERR("ERROR!!!, please dail agai\n");			
+
+			return -1;
+	}
+	
+	memset(buffer,0,MY_BUF_SIZE);
+	strcpy(buffer, "MDIALUP");
+	ret = getATOutput("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
+	
+	WS_ERR("MDIALUP buffer is %s\n", buffer);
+	if(ret == -1){
+		WS_ERR("ERROR!!!, please dail agai\n");				
+
+		return -1;
+	}else if (!hasIP(buffer)) {
+		memset(buffer,0,MY_BUF_SIZE);
+		strcpy(buffer, "OK");
+		ret = getATOutput("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
+		if(ret == 0)
+		{
+			
+			WS_ERR("MDIALUP success\n");
+		}else{
+			
+			WS_ERR("MDIALUP fail\n");
+			return -1;
+		}
+	}else{
+		
+		WS_ERR("MDIALUP hasIP\n");
+	}	
+	
+	//execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
+	
+	//memset(buffer,0,258);
+	//execute4GCmd("echo -e 'AT+MDIALUPCFG=\"auto\",1\r\n' > /dev/ttyUSB2",buffer);
+	
+	memset(buffer,0,MY_BUF_SIZE);
+	strcpy(buffer, "MIPCALL");
+	ret = getATOutput("echo -e 'AT+MIPCALL?\r\n' > /dev/ttyUSB2",buffer);
+	if(ret == 0)
+	{
+		
+		WS_ERR("MIPCALL success\n");
+		if (hasIP(buffer)) {
+			
+			WS_ERR("MIPCALL hasIP\n");
+		}
+	}else if(ret == -1){
+		
+		WS_ERR("ERROR!!!, please dail agai\n");
+		return -1;
+	}
+	KillProcessByName("udhcpc");
+	system("udhcpc -i 4g0");	
+
+	return 0;
+}
+
+int dail4G2()
 {
 	int ret;
     int dailCnt = 0;
@@ -3205,24 +3306,12 @@ int check4GDail()
 		
 		memset(buffer,0,MY_BUF_SIZE);
 		strcpy(buffer, "MDIALUP");
-		ret = execute4GCmd("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
-		if(ret == -2){
-			WS_ERR("select failed or Timeout occurred try again\n");			
-			/*if(dailCnt++ < 3){
-				goto dail;
-			}else{
-				dailCnt = 0;
-				
-				//system("udhcpc -i 4g0");
-				return -1;
-			}*/
-			return -1;
-		}
+		ret = getATOutput("echo -e 'AT+MDIALUP?\r\n' > /dev/ttyUSB2",buffer);
 		WS_ERR("MDIALUP buffer is %s\n", buffer);
 		if (!hasIP(buffer)) {
 			memset(buffer,0,MY_BUF_SIZE);
 			strcpy(buffer, "OK");
-			ret = execute4GCmd("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
+			ret = getATOutput("echo -e 'AT+MDIALUP=1,1\r\n' > /dev/ttyUSB2",buffer);
 			if(ret == 0)
 			{
 				
@@ -3232,7 +3321,8 @@ int check4GDail()
 				return 0;
 			}else{
 				
-				WS_ERR("MDIALUP fail\n");
+				WS_ERR("MDIALUP fail\n");				
+				pclose(fp);
 				return -1;
 			}
 		}else{
@@ -3423,6 +3513,8 @@ void* sendJsonorHeart(void* arg)
 	
     while (gHeartThreadExit == FALSE) {
         if (nopong_cnt > 2 && g_isSg) {
+        
+        //if (0) {
             WS_INFO("!!!!!client: not recv WDT_PONG %d\n", nopong_cnt);		
 			WS_INFO("!!!!!******disconnect server******\n");
             nopong_cnt = 0;
@@ -3613,7 +3705,7 @@ int recvDataCall(handleData callback)
 		nopong_cnt--;
         WS_INFO("client: recv WDT_PONG %d,errno%d\r\n", nopong_cnt,errno);
 		return 0;
-    }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR)){		//EWOULDBLOCK,EINTR 11 4
+    }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){		//EWOULDBLOCK,EINTR 11 4
 		WS_INFO("No receive data   !!\r\n");
 		
 		WS_INFO("ret %d %s%d\n", ret ,strerror(errno),errno); 
@@ -3630,7 +3722,7 @@ int recvDataCall(handleData callback)
 			}else{
 				return 0;
 			}
-							
+								
 		}
 			
 		return 0;
