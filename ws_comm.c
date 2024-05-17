@@ -140,7 +140,7 @@ pthread_mutex_t mutex;
 char recv_buff[RECV_PKG_MAX];
 char send_buff[SEND_PKG_MAX];
 unsigned char token_checksume[64];
-unsigned char token_checksume1[128];
+char token_checksume1[128];
 char tokenjson[MY_BUF_SIZE] = {0};
 
 //char ctoken_checksume[128];
@@ -1227,9 +1227,9 @@ static int32_t ws_enPackage(
         else
             return 0;
     }
-    else
+    else{
         return 0;
-	
+    }
 	return 0;
 }
 static int32_t ws_dePackage(
@@ -1537,21 +1537,21 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
         WS_ERR("socket error\r\n");
         return -1;
     }
-	struct timeval tv;
-
-	tv.tv_sec  = 1; 
-	tv.tv_usec = 0;
-
-	setsockopt(myfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
-
-	struct timeval timeout;
-	timeout.tv_sec = 10;
-	timeout.tv_usec = 0;
-
-	if (setsockopt(myfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-		WS_INFO("SO_RCVTIMEO set\n");
-	}
-	
+//	struct timeval tv;
+//
+//	tv.tv_sec  = 1; 
+//	tv.tv_usec = 0;
+//
+//	setsockopt(myfd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+//
+//	struct timeval timeout;
+//	timeout.tv_sec = 10;
+//	timeout.tv_usec = 0;
+//
+//	if (setsockopt(myfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+//		WS_INFO("SO_RCVTIMEO set\n");
+//	}
+//	
 	/*int iOptVal = 0;
 	int iOptLen = sizeof(int);
 	int iResult = getsockopt(fd, SOL_SOCKET, SO_RCVBUF, (char *)&iOptVal, &iOptLen);
@@ -1577,9 +1577,9 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
 		ws_delayms(1);
     }
 	    //非阻塞
-    //ret = fcntl(fd, F_GETFL, 0);
-    //fcntl(fd, F_SETFL, ret | O_NONBLOCK);
-    
+    //ret = fcntl(myfd, F_GETFL, 0);
+    //fcntl(myfd, F_SETFL, ret | O_NONBLOCK);
+
 	//SSL_library_init();
     //SSL_load_error_strings();
     wolfSSL_Init();
@@ -1624,12 +1624,13 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
                 usleep(100000);
                 return -1;
             default:    
-                WS_ERR("SSL_connect:%s\n", __FUNCTION__);
+                WS_ERR("SSL_connect:%s SSL_get_error= %d\n", __FUNCTION__,SSL_get_error(myssl, ssl_ret));
                 return -1;
         }   
     }
 	
-	/* 基于 ctx 产生一个新的 SSL */
+	ret = fcntl(myfd, F_GETFL, 0);
+	fcntl(myfd, F_SETFL, ret | O_NONBLOCK);/* 基于 ctx 产生一个新的 SSL */
 
     //发送http协议头
     memset(shakeKey, 0, sizeof(shakeKey));
@@ -1735,16 +1736,16 @@ int32_t ws_requestServer(char* ip, int32_t port, char* path, int32_t timeoutMs)
                 WS_HEX(stderr, retBuff, ret);
 				return -1;
             }
-        }else if ((ret == 0) && (errno == EWOULDBLOCK || errno == EINTR)){
+        }else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)){
 		//WS_INFO("No receive data   !!\r\n");
 		
 		WS_ERR("%s%d\n", strerror(errno),errno); 
 			
-		return 0;
+		//return 0;
 	}else{
 		WS_ERR("qqqFailed to connection\n");
 		WS_ERR("abnormal connection  ret%d  errno%d %d %d!!\r\n",ret,errno,EWOULDBLOCK,EINTR);
-		return -1;
+		//return -1;
 	}
         ws_delayms(1);
         //超时检查
@@ -2131,25 +2132,90 @@ int32_t ws_send(SSL *myssl, void* buff, int32_t buffLen, bool mask, Ws_DataType 
     //WS_INFO("ws_send: len/%d %d\r\n", buffLen,retLen);
     //WS_HEX(stdout, wsPkg, retLen);
 #endif
-
-    //ret = send(fd, wsPkg, retLen, MSG_NOSIGNAL);
-	ret = wolfSSL_write(myssl, wsPkg, retLen);
-	if (ret > 0) {
-	// 数据成功写入
-			WS_INFO("数据成功写入%d\n",ret);
-	}else if (ret == 0) {
-		
-		WS_INFO("Connection closed by peer\n");
-		return -1;
-	}else {
-		
-		WS_INFO("Handle error\n");
-		return -1;
-	}
-
+	int total_bytes_written = 0;
+    int bytes_written;
+//	    int sndbuf, rcvbuf, available_sndbuf, available_rcvbuf;
+//    socklen_t optlen = sizeof(int);
+//
+//    // 获取TCP发送缓冲区大小
+//    if (getsockopt(myfd, SOL_SOCKET, SO_SNDBUF, &sndbuf, &optlen) < 0) {
+//        perror("11getsockopt failed");
+//    }
+//
+//    // 获取TCP接收缓冲区大小
+//    if (getsockopt(myfd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, &optlen) < 0) {
+//        perror("22getsockopt failed");
+//    }
+//
+//    // 获取可用的发送缓冲区大小
+//    if (getsockopt(myfd, SOL_SOCKET, SO_SNDBUFFORCE, &available_sndbuf, &optlen) < 0) {
+//        perror("33getsockopt failed");
+//    }
+//
+//    // 获取可用的接收缓冲区大小
+//    if (getsockopt(myfd, SOL_SOCKET, SO_RCVBUFFORCE, &available_rcvbuf, &optlen) < 0) {
+//        perror("44getsockopt failed");
+//    }
+//	
+//
+//    WS_INFO("TCP发送缓冲区大小: %d bytes\n", sndbuf);
+//    WS_INFO("TCP接收缓冲区大小: %d bytes\n", rcvbuf);
+//    WS_INFO("剩余可用发送缓冲区大小: %d bytes\n", available_sndbuf);
+//    WS_INFO("剩余可用接收缓冲区大小: %d bytes\n", available_rcvbuf);
 	
+//    while (total_bytes_written < retLen) {
+//    //ret = send(fd, wsPkg, retLen, MSG_NOSIGNAL);
+//		bytes_written = wolfSSL_write(myssl, wsPkg, retLen - total_bytes_written);
+//		if (bytes_written > 0) {
+//            total_bytes_written += bytes_written;			
+//			WS_INFO("this time bytes_written:%d, total_bytes_written:%d, need_written:%d\n",bytes_written,total_bytes_written,retLen);
+//		}else if (ret == 0) {
+//			
+//			WS_INFO("Connection closed by peer\n");
+//			return -1;
+//		}else {
+//			
+//			WS_INFO("Handle error\n");
+//			return -1;
+//		}
+//    }
+	
+	fd_set writefds;
+	struct timeval timeout;
+	FD_ZERO(&writefds);
+    FD_SET(myfd, &writefds);
+
+    timeout.tv_sec = 5;  // Timeout of 5 seconds
+    timeout.tv_usec = 0;
+
+    int ready = select(myfd + 1, NULL, &writefds, NULL, &timeout);
+    if (ready == -1) {
+        perror("select failed");
+        return -1;
+    } else if (ready == 0) {
+        WS_INFO("select timeout, data may not be sent successfully\n");
+        // Handle timeout, data may not be sent successfully
+        return -1;
+    }else{
+	    while (total_bytes_written < retLen) {
+	    //ret = send(fd, wsPkg, retLen, MSG_NOSIGNAL);
+			bytes_written = wolfSSL_write(myssl, wsPkg, retLen - total_bytes_written);
+			if (bytes_written > 0) {
+	            total_bytes_written += bytes_written;			
+				WS_INFO("this time bytes_written:%d, total_bytes_written:%d, need_written:%d\n",bytes_written,total_bytes_written,retLen);
+			}else if (ret == 0) {
+				
+				WS_INFO("Connection closed by peer\n");
+				return -1;
+			}else {
+				
+				WS_INFO("Handle error\n");
+				return -1;
+			}
+	    }
+	}
     free(wsPkg);
-    return ret;
+    return total_bytes_written;
 }
 int wssend2(char *buf,int data_len)
 {
@@ -2596,7 +2662,7 @@ int au_server()
         }
         else
         {
-            WS_INFO("ws_send au success\n");
+            WS_INFO("ws_send auth\n");
             return 0;
         }
     }
@@ -3360,13 +3426,26 @@ int linkCmdServer(char* ip, int32_t port, char* path)
     }else{
 		WS_INFO("connect success !!\r\n");
     }
-	au_server();
+	ret = au_server();
+	if(-1 == ret)
+		return -1;
 
-	int recvCount = 3; // 设置最大重试次数
-	while(recvCount-- > 0)
-	{
-		//接收数据
+	fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(myfd, &readfds);
 
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // Timeout of 5 seconds
+    timeout.tv_usec = 0;
+
+    int ready = select(myfd + 1, &readfds, NULL, NULL, &timeout);
+    if (ready == -1) {
+        perror("select failed");
+        return -1;
+    } else if (ready == 0) {
+        WS_INFO("select timeout, no data available for reading\n");
+        return -1;
+    }else{
 		ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);		
 		if (ret > 0)
 		{
@@ -3389,12 +3468,39 @@ int linkCmdServer(char* ip, int32_t port, char* path)
 			WS_INFO("recv <= 0 linkCmdServer fail!!\r\n");
 			//recvCount--;
 		}
-		ws_delayms(10);
+    }
+//	int recvCount = 3; // 设置最大重试次数
+//	while(recvCount-- > 0)
+//	{
+//		//接收数据
+//
+//		ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);		
+//		if (ret > 0)
+//		{
+//			WS_INFO("111client(%d): recv len/%d %s\r\n", pid, ret, recv_buff);
+//			
+//			if (strstr(recv_buff, "\"code\":200") != NULL)
+//            {
+//				WS_INFO("111au success \r\n");
+//				return 0;
+//
+//            }else if(strstr(recv_buff, "\"code\":403") != NULL){
+//				WS_ERR("au fail \r\n");
+//				return -1;
+//
+//			}else				
+//				WS_INFO("recv > 0 unknown !!\r\n");			
+//				return -1;
+//
+//		}else if(ret < 0){
+//			WS_INFO("recv <= 0 linkCmdServer fail!!\r\n");
+//			//recvCount--;
+//		}
+//		ws_delayms(10);
+//
+//	}
 
-	}
-	WS_INFO("connect exit !!\r\n");	
-
-    return 0;
+    return -1;
 }
 
 int linkWebServer()
@@ -3405,9 +3511,9 @@ int linkWebServer()
 	memset(path, 0, sizeof(path));
 	char pathDemo[] = "/device?sn=%s&type=0";
 	sprintf(path, pathDemo, SN);
-	strcpy(ip, "iot.daguiot.com");
+	strcpy(ip, "ws5.daguipc.com");
 	
-	//strcpy(ip, "rtc.daguiot.com");
+	//strcpy(ip, "dgiot.tpddns.cn");
 	get_port = 7758;
 
 #else
@@ -3443,7 +3549,17 @@ int linkWebServer()
 
 #endif
 	
-	linkCmdServer(ip, get_port, path);
+	int ret = linkCmdServer(ip, get_port, path);
+	if(-1 == ret)
+	{
+		
+		WS_INFO("linkCmdServer fail!!!\n");
+        return -1;
+	}else{
+		
+		WS_INFO("linkCmdServer success!!!\n");
+		return 0;
+	}
 
 }
 typedef int (*handleData)(char* data, int length);
@@ -3504,23 +3620,23 @@ int wssend(char *buf,int len)
 }
 
 // 发送心跳的函数
-void* sendJsonorHeart(void* arg) 
+void* dg_send(void* arg) 
 {
 	int ret;
 	char* jsonData;
 	int32_t jsonDataLen;
 	jsonData = (char*)arg;
 	
-    while (gHeartThreadExit == FALSE) {
-        if (nopong_cnt > 2 && g_isSg) {
+    while (gHeartThreadExit == FALSE && g_isSg) {
+        if (nopong_cnt > 10) {
         
         //if (0) {
             WS_INFO("!!!!!client: not recv WDT_PONG %d\n", nopong_cnt);		
-			WS_INFO("!!!!!******disconnect server******\n");
+			WS_INFO("!!!!!******disconnect server\n******connect to the xinling server\n");
             nopong_cnt = 0;
 			g_isSg =  0;
 			g_is4GDail = 0;
-			g_fb4GDail = 1;
+			g_fb4GDail = 0;
 			closewsl();
 #ifdef FIREALARM
 			WS_INFO("FIREALARM version\r\n");
@@ -3539,11 +3655,12 @@ void* sendJsonorHeart(void* arg)
 			if(!ret){
 				g_isSg = 1;
 				g_is4GDail = 1;
-				g_fb4GDail = 0;
+				g_fb4GDail = 1;
 				continue;
 			}else{
 				
-				g_is4GDail = 0;
+				//g_is4GDail = 0;
+				ws_delayms(10*1000);
 				gHeartThreadExit = TRUE;
 				gHeartThread = 0;
 			}
@@ -3622,7 +3739,7 @@ void startHeartThread(void)
         return 0;
     }
 
-    pthread_create(&gHeartThread, NULL, sendJsonorHeart, send_buff);
+    pthread_create(&gHeartThread, NULL, dg_send, send_buff);
     if (0 == ret)
         pthread_setname_np(gHeartThread, "sendHeart");
     else
@@ -3665,8 +3782,73 @@ int getTimeFromJSON(const char* json_data) {
 
     return time_value;
 }
-
 int recvDataCall(handleData callback)
+{
+    int ret;
+    memset(recv_buff, 0, sizeof(recv_buff));
+    retPkgType = 0;
+    
+    fd_set readfds;
+    FD_ZERO(&readfds);
+    FD_SET(myfd, &readfds);
+
+    struct timeval timeout;
+    timeout.tv_sec = 5;  // Timeout of 5 seconds
+    timeout.tv_usec = 0;
+
+    int ready = select(myfd + 1, &readfds, NULL, NULL, &timeout);
+    if (ready == -1) {
+        perror("select failed");
+        return -1;
+    } else if (ready == 0) {
+        WS_INFO("select timeout, no data available for reading\n");
+        return 0;
+    }else{
+
+	    // Set the socket to non-blocking mode
+//	    int flags = fcntl(myfd, F_GETFL, 0);
+//	    fcntl(myfd, F_SETFL, flags | O_NONBLOCK);
+
+	    // Read data from the socket
+	    ret = ws_recv(myssl, recv_buff, sizeof(recv_buff), &retPkgType);
+	    WS_INFO("ws_recv(%d) \r\n", ret);
+
+	    if (ret > 0) {
+	        if (strstr(recv_buff, "\"code\":9") != NULL) {
+	            int time_value = getTimeFromJSON(recv_buff);
+	            if (time_value != -1) {
+	                WS_INFO("Time value: %d\n", time_value);
+	                setHeartInterval(time_value);
+	            } else {
+	                WS_INFO("Error: time key not found\n");
+	            }
+	            return 0;
+	        }
+	        WS_INFO("ret %d recv_buff%s\r\n", ret, recv_buff);
+	        callback(recv_buff, sizeof(recv_buff));
+	        return ret;
+	    } else if (retPkgType == WDT_DISCONN) {
+	        WS_INFO("client(%d): recv WDT_DISCONN \r\n", pid);
+	        return -1;
+	    } else if (retPkgType == WDT_PING) {
+	        WS_INFO("client(%d): recv WDT_PING \r\n", pid);
+	    } else if (retPkgType == WDT_PONG) {
+	        nopong_cnt--;
+	        WS_INFO("client: recv WDT_PONG %d, errno %d\r\n", nopong_cnt, errno);
+	        return 0;
+	    } else if ((ret == -1) && (errno == EWOULDBLOCK || errno == EINTR || errno == 0)) {
+	        WS_INFO("No receive data !!\r\n");
+	        WS_INFO("ret %d %s%d\n", ret, strerror(errno), errno);
+	        return 0;
+	    } else {
+	        WS_INFO("******disconnect server******\nabnormal connection  ret %d  errno %d!!\r\n", ret, errno);
+	        return -1;
+	    }
+    }
+    return ret;
+}
+
+int recvDataCall2(handleData callback)
 {
 	
 	int ret;
@@ -3747,6 +3929,8 @@ int ensure4gConnection()
 		    WS_INFO("dail4G ret %d\n", ret);
 		    if (!ret) {
 		        g_is4G = true;
+				
+				return 0;
 		        WS_INFO("dail4G g_is4G %d\n", g_is4G);
 		    } else {
 		        g_is4G = false;
@@ -3757,8 +3941,10 @@ int ensure4gConnection()
 		    ret = check4GDail();
 		    if (!ret) {
 		        g_is4GDail = true;
-		        WS_INFO("check4GDail g_is4GDail %d\n", g_is4GDail);
+				
 				return 0;
+		        WS_INFO("check4GDail g_is4GDail %d\n", g_is4GDail);
+				//return 0;
 		    } else {
 		        g_is4GDail = false;
 		        WS_INFO("check4GDail g_is4GDail %d\n", g_is4GDail);
@@ -3769,6 +3955,10 @@ int ensure4gConnection()
 			WS_INFO("check4GDail,wait \n");
 			sleep(5);
 		}
+//		if(g_is4G || g_is4GDail)
+//		{
+//			return 0;
+//		}
 		usleep(100000);
     }
 }
@@ -3781,6 +3971,8 @@ void* link4G(void* arg)
             ret = ensure4gConnection();
             if (ret == 0) {
                 //break;
+				WS_ERR("link4G success\n");
+                gLink4gThreadExit = TRUE;
             }
         //}
         
@@ -3823,19 +4015,22 @@ void* connectWebServer(void* arg)
 		
 		if (g_is4G && g_is4GDail && !g_isSg) {
 			
-			WS_INFO("linking WebServer \n");
 			ret = linkWebServer();
 			if (ret < 0) {
+				
+				WS_INFO("linking WebServer fail\n");
 				g_isSg = false;
 				continue;
 			}else{
+				
+				WS_INFO("linking WebServer success\n");
 				g_isSg = true;
-				//continue;
+				gWebsocketThreadExit = TRUE;
 			}
 		}
 		if(!g_isSg)
 		{			
-			WS_INFO("connecting WebServer,wait \n");
+			WS_INFO("connecting Server,wait \n");
 			sleep(5);
 		}
 		
@@ -3879,7 +4074,21 @@ void ws_buildCode1(char* package)
 	printf("package %s\n",package);
 
 }
-
+void clearThreadId()
+{
+	if(gLink4gThreadExit){
+	
+			gLink4gThread = 0;
+	}
+	if(gHeartThreadExit){
+	
+			gHeartThread = 0;
+	}
+	if(gWebsocketThreadExit){
+	
+			gWebsocketThread = 0;
+	}
+}
 int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 {
     int ret = 0;
@@ -3889,17 +4098,17 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 
     while (1) {
 		while(0 == gWslConnectExit){
-	        if (0 == gLink4gThread)
+			clearThreadId();
+	        if (0 == gLink4gThread && (!g_is4G || !g_is4GDail) )
 	    	{
 				
 				startLink4G();
 			}
-			if (0 == gWebsocketThread)
+			if (0 == gWebsocketThread && g_is4GDail && !g_isSg)
 	    	{
 				
 				startWebServer();
 			}
-			
 	        if (0 == gHeartThread && g_isSg)
 	    	{
 				
@@ -3912,7 +4121,36 @@ int wslConnect(char *snStr, Ondata handleJson, OnStatus linkStatus)
 						closewsl();
 						g_is4GDail = 0;
 			            g_isSg = 0;
-						gHeartThread = 0;
+		
+						closewsl();
+#ifdef FIREALARM
+						WS_INFO("FIREALARM version\r\n");
+						memset(path, 0, sizeof(path));
+						char pathDemo[] = "/device?sn=%s&type=0";
+						sprintf(path, pathDemo, SN);
+						//strcpy(ip, "iot.daguiot.com");
+						
+						//strcpy(ip, "dgiot.tpddns.cn");
+						
+						strcpy(ip, "ws5.daguipc.com");
+						get_port = 7758;			
+						ret = linkCmdServer(ip, get_port, path);
+		
+#else					
+						ret = linkCmdServer(ip, get_port, path);		
+#endif
+						if(!ret){
+							g_isSg = 1;
+							g_is4GDail = 1;
+							//g_fb4GDail = 1;
+							continue;
+						}else{
+							
+							//g_is4GDail = 0;
+							gHeartThread = 0;
+							gLink4gThread = 0;
+							gWebsocketThread  = 0;
+						}
 					}
 					
 					WS_INFO("OnStatus g_is4G %d g_is4GDail%d g_isSg %d\n", g_is4G, g_is4GDail, g_isSg);
